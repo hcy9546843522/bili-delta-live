@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>运行日志 · 三角洲行动</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/ui.css" />
+    <link rel="stylesheet" href="/logs.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-inner">
+        <div class="brand">
+          <h1><span class="brand-mark">●</span> 运行日志</h1>
+          <span class="brand-sub" id="log-sub">加载中…</span>
+        </div>
+        <nav class="tabs" id="tabs"></nav>
+        <div class="controls">
+          <label class="field">
+            <input type="checkbox" id="auto-refresh" checked />
+            自动刷新
+          </label>
+          <button id="refresh-btn">刷新</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <!-- 概览 -->
+      <div class="stats" id="overview">
+        <div class="loading" style="grid-column: 1/-1">加载中…</div>
+      </div>
+
+      <!-- 筛选 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>筛选</h2>
+            <span class="hint">看采集失败的原因就从「错误」开始</span>
+            <span class="spacer"></span>
+            <span class="hint" id="file-hint"></span>
+          </div>
+          <div class="panel-body">
+            <div class="log-filters">
+              <div class="u-row" id="level-tags">
+                <span class="hint-inline">级别</span>
+                <button class="tag" data-level="">全部</button>
+                <button class="tag active" data-level="error">错误</button>
+                <button class="tag" data-level="warn">警告</button>
+                <button class="tag" data-level="info">信息</button>
+                <button class="tag" data-level="debug">调试</button>
+              </div>
+
+              <div class="u-row" id="scope-tags">
+                <span class="hint-inline">来源</span>
+                <button class="tag active" data-scope="">全部</button>
+                <button class="tag" data-scope="track">track</button>
+                <button class="tag" data-scope="discover">discover</button>
+                <button class="tag" data-scope="sched">调度器</button>
+                <button class="tag" data-scope="server">服务</button>
+              </div>
+
+              <div class="u-row">
+                <input
+                  type="search"
+                  id="q-input"
+                  placeholder="搜关键词，如 风控 / -352 / 超时…"
+                  autocomplete="off"
+                  class="u-grow"
+                />
+                <label class="field">
+                  条数
+                  <select id="limit-select">
+                    <option value="100">100</option>
+                    <option value="200" selected>200</option>
+                    <option value="500">500</option>
+                    <option value="800">800</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 日志列表 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>日志条目</h2>
+            <span class="hint" id="list-hint"></span>
+            <span class="spacer"></span>
+            <button id="copy-btn" class="ghost" title="复制当前筛选结果为文本，方便贴给我排查">复制全部</button>
+          </div>
+          <div class="panel-body">
+            <div id="log-list" class="log-list">
+              <div class="loading">加载中…</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 说明 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>这些日志从哪来</h2>
+            <span class="hint">排查问题前先看这里</span>
+          </div>
+          <div class="panel-body">
+            <p class="note">
+              日志来自两处：<strong>调度器</strong>（每次自动采集的开始／完成／失败／下次时间）和
+              <strong>服务本身</strong>（启动、端口占用、接口报错）。
+              采集子进程的 stderr 也会被捕获进来，所以失败时能看到接口返回码。
+            </p>
+            <p class="note">
+              两级存放：内存里保留最近 <strong>800 条</strong>（本页读的就是内存，不碰磁盘），
+              同时追加到 <code>data/logs.jsonl</code>（超过 5000 行自动截断保留最新），
+              重启服务后内存清空、但文件里的历史还在，可以直接打开看。
+            </p>
+            <p class="note warn">
+              没有日志<strong>不等于</strong>没出问题——如果自动采集是关闭的，本来就不会有任何采集记录。
+              先到「采集设置」确认开关状态。
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="/nav.js"></script>
+    <script src="/logs.js"></script>
+  </body>
+</html>

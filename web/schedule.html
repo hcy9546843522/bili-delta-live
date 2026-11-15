@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>采集设置 · 三角洲行动</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/schedule.css" />
+    <link rel="stylesheet" href="/ui.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-inner">
+        <div class="brand">
+          <h1><span class="brand-mark">●</span> 采集设置</h1>
+          <span class="brand-sub" id="sched-sub">加载中…</span>
+        </div>
+        <nav class="tabs" id="tabs"></nav>
+        <div class="controls"></div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <div id="unavailable" style="display: none"></div>
+
+      <!-- 运行状态 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>运行状态</h2>
+            <span class="hint">下次执行时间由「上次执行时刻 + 间隔」算出</span>
+          </div>
+          <div class="panel-body">
+            <div class="stats" id="status-stats"></div>
+            <div id="status-detail" class="sched-detail"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 频率配置 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>采集频率</h2>
+            <span class="hint">改完点保存，立即生效，无需重启</span>
+          </div>
+          <div class="panel-body">
+            <div class="row-note" id="switch-note">
+              <strong>总开关</strong>
+              <span class="hint" id="enabled-hint"></span>
+              <span class="spacer"></span>
+              <label class="switch">
+                <input type="checkbox" id="enabled" />
+                <span class="switch-track"><span class="switch-knob"></span></span>
+                <span class="switch-text" id="enabled-text">关闭</span>
+              </label>
+            </div>
+
+            <div class="form-grid">
+              <label class="form-field">
+                <span class="form-label">track 间隔（小时）</span>
+                <input type="number" id="track-hours" min="1" max="168" step="1" />
+                <span class="form-tip" id="track-tip"></span>
+              </label>
+
+              <label class="form-field">
+                <span class="form-label">discover 间隔（小时）</span>
+                <input type="number" id="discover-hours" min="1" max="168" step="1" />
+                <span class="form-tip" id="discover-tip"></span>
+              </label>
+            </div>
+
+            <div class="preset-bar">
+              <span class="hint">discover 快捷预设（都必须与 24 互质）：</span>
+              <button type="button" class="chip" data-discover="23">23 小时</button>
+              <button type="button" class="chip" data-discover="25">25 小时</button>
+              <button type="button" class="chip" data-discover="13">13 小时</button>
+              <button type="button" class="chip" data-discover="7">7 小时</button>
+              <button type="button" class="chip" data-discover="5">5 小时</button>
+            </div>
+
+            <details class="advanced">
+              <summary>高级设置（防风控相关，一般不用改）</summary>
+              <div class="form-grid">
+                <label class="form-field">
+                  <span class="form-label">discover 最多翻页数</span>
+                  <input type="number" id="discover-max-pages" min="1" max="300" step="1" />
+                  <span class="form-tip">当前专区约 82 页到底。留余量即可，调小会漏掉尾部主播。</span>
+                </label>
+                <label class="form-field">
+                  <span class="form-label">track 批量间隔（毫秒）</span>
+                  <input type="number" id="track-batch-delay" min="500" max="10000" step="100" />
+                  <span class="form-tip">每批 150 个 UID 之间的等待。调小更快，但更容易被风控。</span>
+                </label>
+                <label class="form-field">
+                  <span class="form-label">discover 翻页间隔（毫秒）</span>
+                  <input type="number" id="discover-delay" min="500" max="10000" step="100" />
+                  <span class="form-tip">实际会在此值 1~1.75 倍间随机。</span>
+                </label>
+              </div>
+            </details>
+
+            <div class="action-bar">
+              <button id="btn-save" class="primary">保存设置</button>
+              <button id="btn-run-track">立即 track 一次</button>
+              <button id="btn-run-discover">立即 discover 一次</button>
+              <span class="spacer"></span>
+              <span class="save-hint" id="save-hint"></span>
+            </div>
+
+            <!-- 手动执行进度 -->
+            <div class="progress-box" id="progress-box" hidden>
+              <div class="progress-head">
+                <span class="progress-title" id="progress-title">执行中…</span>
+                <span class="spacer"></span>
+                <span class="progress-pct" id="progress-pct"></span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" id="progress-fill"></div>
+              </div>
+              <div class="progress-meta" id="progress-meta"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 说明 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>为什么推荐 23 或 25 小时</h2>
+            <span class="hint">关键在于间隔与 24 是否互质</span>
+          </div>
+          <div class="panel-body">
+            <p class="note">
+              discover 用的是「分区列表」接口，它<strong>只返回此刻正在直播的房间</strong>。
+              如果固定在每天同一时刻扫，就相当于每天只在这个钟点睁一次眼——只在别的时段开播的新主播会永远发现不了。
+            </p>
+            <p class="note">
+              真正的规律：间隔等于 <strong>24 小时</strong>时，每次都落在同一个钟点，只覆盖 <strong>1</strong> 个钟点；
+              间隔为 <strong>12 / 6 / 8 小时</strong>这类能量整除 24 的值，也只覆盖 <strong>2 / 4 / 3</strong> 个钟点。
+              只有当间隔与 24 <strong>互质</strong>（最大公约数为 1）时，执行时刻才会划过全部 24 个钟点。
+            </p>
+            <p class="note">
+              与 24 互质的候选：<strong>5、7、11、13、17、19、23、25</strong> 小时。
+              数值越接近 24，每天请求次数越少，但转完一圈越慢：
+            </p>
+            <div class="drift-demo" id="drift-demo"></div>
+            <p class="note">
+              推荐 <strong>23 或 25</strong>：每天仍只扫约 1 次（约 80 请求），
+              代价是覆盖全部钟点需要 23~25 天。想更快发现新主播可降到 <strong>13 或 7 小时</strong>，
+              请求量分别约 150 / 280 次每天。
+            </p>
+            <p class="note">
+              <strong>track 保持 1 小时</strong>即可，它只查池内已知主播，很便宜；加密到更短收益有限，反而增加风控风险。
+            </p>
+            <p class="note warn">
+              如果你已经在服务器上用 crontab 跑采集，请把这里的开关<strong>保持关闭</strong>，
+              否则两边同时跑会让请求量翻倍。
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="/nav.js"></script>
+    <script src="/schedule.js"></script>
+  </body>
+</html>

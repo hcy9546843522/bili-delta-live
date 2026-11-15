@@ -1,0 +1,282 @@
+/* ============================================================================
+ * discoveries.css —— 「新发现」页专用样式
+ *
+ * 只放本页独有的东西，通用组件（面板/表格/徽章）都在 ui.css 里。
+ * ========================================================================== */
+
+/* ------------------------------------------------------------- 统计卡 */
+
+#overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+/* --------------------------------------------------------- 每日柱状图 */
+
+/*
+ * 为什么自己画而不用图表库：
+ *   本项目零依赖，为了一个「按天计数」的柱图引入几十 KB 的库不划算。
+ *   这里用 flex + 高度百分比，天然自适应宽度。
+ */
+.day-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 190px;
+  padding: 8px 2px 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.day-chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 190px;
+  color: var(--u-text-3);
+  font-size: var(--u-fs-sm);
+  border: 1px dashed var(--u-line);
+  border-radius: var(--u-r);
+}
+
+/* 一根柱子 = 一天。整列都是按钮，点击区域比柱子本身大，好点中 */
+.day-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: 1 0 18px;
+  min-width: 18px;
+  height: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--u-r-sm);
+  transition: background 0.12s;
+}
+
+.day-col:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+/* 柱子本体：真实高度由 JS 写成百分比 */
+.day-bar {
+  width: 100%;
+  max-width: 22px;
+  min-height: 2px;
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(180deg, var(--u-blue), rgba(76, 196, 242, 0.35));
+  transition: background 0.12s, transform 0.12s;
+}
+
+.day-col:hover .day-bar {
+  background: linear-gradient(180deg, #7ad7fa, rgba(76, 196, 242, 0.5));
+}
+
+/* 选中那天：粉色高亮 + 顶部数字常显 */
+.day-col.selected {
+  background: var(--u-accent-soft);
+}
+
+.day-col.selected .day-bar {
+  background: linear-gradient(180deg, var(--u-accent), rgba(251, 114, 153, 0.4));
+}
+
+/* 「0 个新发现」的日子：只留一条贴底的淡线，表示扫过但没新人 */
+.day-col.zero .day-bar {
+  background: var(--u-surface-3);
+  min-height: 2px;
+}
+
+.day-col.zero.selected .day-bar {
+  background: rgba(251, 114, 153, 0.45);
+}
+
+.day-num {
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--u-text-3);
+  height: 12px;
+  line-height: 12px;
+}
+
+.day-col.selected .day-num,
+.day-col:hover .day-num {
+  color: var(--u-text);
+}
+
+.day-label {
+  font-size: 9.5px;
+  color: var(--u-text-3);
+  white-space: nowrap;
+  height: 12px;
+  line-height: 12px;
+  /* 日期太多时只显示部分，靠 CSS 隐藏，避免文字重叠 */
+  overflow: hidden;
+}
+
+/* 柱图底部的日期：每隔几根才显示一次，由 JS 打上 show-label 类 */
+.day-col .day-label:not(.show) {
+  visibility: hidden;
+}
+
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 2px 0;
+  font-size: var(--u-fs-xs);
+  color: var(--u-text-3);
+  border-top: 1px solid var(--u-line-soft);
+  margin-top: 8px;
+}
+
+.chart-legend .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.chart-legend .dot.normal {
+  background: var(--u-blue);
+}
+
+.chart-legend .dot.selected {
+  background: var(--u-accent);
+}
+
+.chart-legend .dot.zero {
+  background: var(--u-surface-3);
+}
+
+/* ------------------------------------------------------------- 明细表 */
+
+/*
+ * 表头排序：整格可点，带悬停反馈与方向箭头。
+ * 提示词在 title 里，鼠标悬停能看到「点击切换」。
+ */
+#detail-table thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color 0.15s, background 0.15s;
+}
+
+#detail-table thead th.sortable:hover {
+  color: var(--u-text);
+  background: var(--u-surface-2);
+}
+
+/* 当前排序列高亮，避免「点了不知道生效没有」 */
+#detail-table thead th.sortable.active {
+  color: var(--u-accent);
+}
+
+#detail-table thead th .arrow {
+  margin-left: 4px;
+  font-size: 9px;
+  vertical-align: 1px;
+}
+
+#detail-table td.uid-cell {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: var(--u-fs-xs);
+  color: var(--u-text-3);
+}
+
+#detail-table td.title-cell {
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--u-text-2);
+}
+
+/* 直播状态列：徽章 + 「多久前观测」的弱化说明，两者同一行不折行 */
+#detail-table td.status-cell {
+  white-space: nowrap;
+}
+
+/* 昵称列：头像 + 名字，名字过长省略 */
+#detail-table .who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+#detail-table .who img,
+#detail-table .who .ph {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--u-surface-3);
+  flex: 0 0 24px;
+}
+
+#detail-table .who .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------- 说明文字 */
+
+.note {
+  margin: 0 0 10px;
+  font-size: var(--u-fs-sm);
+  line-height: 1.75;
+  color: var(--u-text-2);
+}
+
+.note:last-child {
+  margin-bottom: 0;
+}
+
+.note strong {
+  color: var(--u-text);
+  font-weight: 600;
+}
+
+.note.warn {
+  padding: 10px 12px;
+  border-left: 2px solid var(--u-amber);
+  background: var(--u-amber-soft);
+  border-radius: 0 var(--u-r-sm) var(--u-r-sm) 0;
+  color: #f0d3a0;
+}
+
+/* ------------------------------------------------------------- 分页 */
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 0 0;
+}
+
+.pager .info {
+  margin-right: auto;
+}
+
+/* --------------------------------------------------------- 窄屏 */
+
+@media (max-width: 860px) {
+  .day-chart {
+    height: 150px;
+  }
+
+  #detail-table td.title-cell {
+    max-width: 160px;
+  }
+}

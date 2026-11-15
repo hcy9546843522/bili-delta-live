@@ -1,0 +1,270 @@
+/* ============================================================================
+ * logs.css —— 「运行日志」页专用样式
+ *
+ * 通用组件（面板/表格/徽章/空态）都在 ui.css，这里只放日志相关的东西。
+ * ========================================================================== */
+
+#overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+/* ---------------------------------------------------------------- 筛选区 */
+
+.log-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hint-inline {
+  font-size: var(--u-fs-xs);
+  color: var(--u-text-3);
+  min-width: 28px;
+}
+
+/* 级别/来源的标签组：允许换行，窄屏不挤 */
+#level-tags,
+#scope-tags {
+  gap: 6px;
+}
+
+/* 级别标签的选中态用各自的语义色，比统一粉色更好辨认 */
+#level-tags .tag.active[data-level='error'] {
+  background: var(--u-red-soft);
+  border-color: var(--u-red);
+  color: var(--u-red);
+}
+
+#level-tags .tag.active[data-level='warn'] {
+  background: var(--u-amber-soft);
+  border-color: var(--u-amber);
+  color: var(--u-amber);
+}
+
+#level-tags .tag.active[data-level='info'] {
+  background: var(--u-blue-soft);
+  border-color: var(--u-blue);
+  color: var(--u-blue);
+}
+
+#level-tags .tag.active[data-level='debug'] {
+  background: var(--u-surface-3);
+  border-color: var(--u-line);
+  color: var(--u-text-2);
+}
+
+/* ---------------------------------------------------------------- 日志列表 */
+
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* 日志可能很长，给个上限并内部滚动，避免页面无限长 */
+  max-height: 62vh;
+  overflow-y: auto;
+  border-radius: var(--u-r);
+  background: var(--u-line-soft);
+  border: 1px solid var(--u-line-soft);
+}
+
+.log-list > .loading,
+.log-list > .empty {
+  background: transparent;
+  border: none;
+}
+
+/* 单条日志：时间 | 级别 | 来源 | 正文 */
+.log-row {
+  display: grid;
+  grid-template-columns: 62px 52px 72px 1fr;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--u-surface);
+  font-size: var(--u-fs-sm);
+  transition: background 0.12s;
+}
+
+.log-row:hover {
+  background: var(--u-surface-2);
+}
+
+/* 错误项左侧加一条红边，扫一眼就能定位 */
+.log-row.error {
+  box-shadow: inset 2px 0 0 var(--u-red);
+}
+
+.log-row.warn {
+  box-shadow: inset 2px 0 0 var(--u-amber);
+}
+
+.log-time {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: var(--u-fs-xs);
+  color: var(--u-text-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.log-level {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.log-row.error .log-level {
+  color: var(--u-red);
+}
+
+.log-row.warn .log-level {
+  color: var(--u-amber);
+}
+
+.log-row.info .log-level {
+  color: var(--u-blue);
+}
+
+.log-row.debug .log-level {
+  color: var(--u-text-3);
+}
+
+.log-scope {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: var(--u-fs-xs);
+  color: var(--u-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-body {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.log-msg {
+  color: var(--u-text);
+  line-height: 1.5;
+}
+
+.log-row.warn .log-msg {
+  color: #f0d3a0;
+}
+
+.log-row.error .log-msg {
+  color: #ffb3bd;
+}
+
+/* 附加信息：stderr 详情、退出码等，用等宽 + 灰底，和正文区分开 */
+.log-extra {
+  margin-top: 5px;
+  padding: 7px 9px;
+  border-radius: var(--u-r-sm);
+  background: var(--u-bg-2);
+  border: 1px solid var(--u-line-soft);
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: var(--u-fs-xs);
+  line-height: 1.6;
+  color: var(--u-text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* 单条附加信息默认最多 6 行，可点击展开 */
+  max-height: 96px;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+}
+
+.log-extra.expanded {
+  max-height: none;
+}
+
+/* 折叠时底部渐隐，暗示"还有内容" */
+.log-extra:not(.expanded)::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 22px;
+  background: linear-gradient(transparent, var(--u-bg-2));
+  pointer-events: none;
+}
+
+.log-extra-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: var(--u-surface-3);
+  color: var(--u-text-3);
+  vertical-align: 1px;
+}
+
+.log-row.error .log-extra-tag {
+  background: var(--u-red-soft);
+  color: var(--u-red);
+}
+
+/* ------------------------------------------------------------ 说明文字 */
+
+.note {
+  margin: 0 0 10px;
+  font-size: var(--u-fs-sm);
+  line-height: 1.75;
+  color: var(--u-text-2);
+}
+
+.note:last-child {
+  margin-bottom: 0;
+}
+
+.note strong {
+  color: var(--u-text);
+  font-weight: 600;
+}
+
+.note code {
+  background: var(--u-bg-2);
+  border: 1px solid var(--u-line-soft);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: var(--u-fs-xs);
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--u-text-2);
+}
+
+.note.warn {
+  padding: 10px 12px;
+  border-left: 2px solid var(--u-amber);
+  background: var(--u-amber-soft);
+  border-radius: 0 var(--u-r-sm) var(--u-r-sm) 0;
+  color: #f0d3a0;
+}
+
+/* ---------------------------------------------------------------- 窄屏 */
+
+@media (max-width: 860px) {
+  /* 窄屏把来源列藏掉，时间/级别/正文保留 */
+  .log-row {
+    grid-template-columns: 56px 48px 1fr;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .log-scope {
+    display: none;
+  }
+
+  .log-list {
+    max-height: 56vh;
+  }
+}

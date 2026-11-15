@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>新发现 · 三角洲行动</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/ui.css" />
+    <link rel="stylesheet" href="/discoveries.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-inner">
+        <div class="brand">
+          <h1><span class="brand-mark">●</span> 新发现</h1>
+          <span class="brand-sub" id="summary-sub">加载中…</span>
+        </div>
+        <nav class="tabs" id="tabs"></nav>
+        <div class="controls">
+          <label class="field">
+            范围
+            <select id="range-select">
+              <option value="14">近 14 天</option>
+              <option value="30" selected>近 30 天</option>
+              <option value="90">近 90 天</option>
+              <option value="365">近一年</option>
+            </select>
+          </label>
+          <button id="refresh-btn" title="重新读取数据">刷新</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <!-- 未就绪 -->
+      <div id="unavailable" style="display: none"></div>
+
+      <!-- 概览 -->
+      <div class="stats" id="overview">
+        <div class="loading" style="grid-column: 1/-1">加载中…</div>
+      </div>
+
+      <!-- 每日新发现趋势 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>每天新发现的主播</h2>
+            <span class="hint">点柱状图选某一天，下方看当天名单</span>
+            <span class="spacer"></span>
+            <span class="hint" id="chart-hint"></span>
+          </div>
+          <div class="panel-body">
+            <div id="day-chart" class="day-chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 当天名单 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2 id="detail-title">当天新发现的主播</h2>
+            <span class="hint" id="detail-hint">选一天查看明细</span>
+            <span class="spacer"></span>
+            <label class="field">
+              每页
+              <select id="page-size">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+              </select>
+            </label>
+            <button id="export-btn" class="ghost" title="导出当前名单为 CSV">导出 CSV</button>
+          </div>
+          <div class="panel-body">
+            <div class="table-scroll">
+              <table id="detail-table">
+                <thead>
+                  <!-- 表头由 discoveries.js 的 renderHead() 生成（带排序按钮与方向箭头） -->
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="8" class="u-dim" style="text-align: center; padding: 28px">
+                      点上方柱状图选一天
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager" id="pager"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 口径说明 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>这个数字是怎么来的</h2>
+            <span class="hint">避免误读</span>
+          </div>
+          <div class="panel-body">
+            <p class="note">
+              「新发现」= 这个 UID <strong>第一次进入主播池</strong>的时间，按东八区自然日归类。
+              同一个人无论之后改多少次昵称，都只算一次。
+            </p>
+            <p class="note">
+              来源分四种：
+              <span class="badge info">discover</span>
+              扫专区榜发现（每天一次，主力来源）；
+              <span class="badge mute">track</span>
+              刷已有主播时顺带遇到的新人（说明 discover 那次漏了）；
+              <span class="badge warn">manual</span>
+              在出勤页按 UID 手动写进池子的；
+              <span class="badge mute">import</span>
+              从历史快照一次性建池导入的存量，<strong>不算真正的发现</strong>。
+            </p>
+            <p class="note warn">
+              discover 每天只跑一次，且分区接口只返回<strong>此刻正在直播</strong>的房间，
+              所以「某天 0 个新发现」不代表没人开播，只代表那个时刻扫到的都是熟人。
+              把间隔设成 23/25 小时可以让扫描时刻逐日漂移，长期把漏掉的时段补齐。
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="/nav.js"></script>
+    <script src="/discoveries.js"></script>
+  </body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>三角洲行动 · 直播数据看板</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/ui.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-inner">
+        <div class="brand">
+          <h1><span class="brand-mark">●</span> 三角洲行动</h1>
+          <span class="brand-sub" id="meta-sub">加载中…</span>
+        </div>
+
+        <nav class="tabs" id="tabs"></nav>
+
+        <div class="controls">
+          <button id="refresh-btn" title="重新读取数据">刷新</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <!-- 概览 -->
+      <div class="stats" id="stats">
+        <div class="loading" style="grid-column: 1/-1">加载中…</div>
+      </div>
+
+      <!-- 来源信息 -->
+      <div id="source-info" style="margin: -12px 0 22px"></div>
+
+      <!-- 图表 -->
+      <div class="grid-2">
+        <section>
+          <div class="panel">
+            <div class="panel-head">
+              <h2>人气 Top 20</h2>
+              <span class="hint">按当前筛选结果</span>
+            </div>
+            <div class="panel-body">
+              <svg class="chart" id="chart-top" viewBox="0 0 620 60"></svg>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div class="panel">
+            <div class="panel-head">
+              <h2>人气分布</h2>
+              <span class="hint">房间数按人气区间</span>
+            </div>
+            <div class="panel-body">
+              <svg class="chart" id="chart-dist" viewBox="0 0 620 236"></svg>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- 趋势 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>历史趋势</h2>
+            <span class="hint">来自采集记录，每次 track 一个点</span>
+            <span class="spacer"></span>
+            <label class="field">
+              指标
+              <select id="trend-mode">
+                <option value="live">在播房间数</option>
+                <option value="pool">主播池规模</option>
+              </select>
+            </label>
+          </div>
+          <div class="panel-body">
+            <svg class="chart" id="chart-trend" viewBox="0 0 620 220"></svg>
+          </div>
+        </div>
+      </section>
+
+      <!-- 房间明细与标题高频词已拆到独立页面 /rooms.html -->
+      <section>
+        <div class="panel">
+          <div class="panel-body">
+            <div class="empty">
+              逐条查看房间、按关键词筛选标题、导出 CSV，请到
+              <a href="/rooms.html" style="color: var(--accent)">房间明细</a> 页。
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="cover-preview" class="cover-preview" hidden>
+      <img id="cover-preview-img" alt="" />
+    </div>
+
+    <script src="/nav.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

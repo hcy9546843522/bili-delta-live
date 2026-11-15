@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>数据分析 · 三角洲行动</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/ui.css" />
+    <link rel="stylesheet" href="/analyze.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-inner">
+        <div class="brand">
+          <h1><span class="brand-mark">●</span> 数据分析</h1>
+          <span class="brand-sub" id="summary-sub">加载中…</span>
+        </div>
+        <nav class="tabs" id="tabs"></nav>
+        <div class="controls">
+          <label class="field">
+            Top
+            <select id="top-select">
+              <option value="10">10 人</option>
+              <option value="20" selected>20 人</option>
+              <option value="50">50 人</option>
+            </select>
+          </label>
+          <button id="refresh-btn" title="重新聚合当前数据">刷新</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <div id="unavailable" style="display: none"></div>
+
+      <!-- 概览 -->
+      <div class="stats" id="overview">
+        <div class="loading" style="grid-column: 1/-1">加载中…</div>
+      </div>
+
+      <!--
+        口径声明放在图表之前，不放在页面底部。
+        时段/星期两张图极容易被误读成「主播开播规律」，而它们其实只反映
+        采集任务的运行时刻。放在底下就没人看了。
+      -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>先看口径</h2>
+            <span class="hint">否则下面的图会被误读</span>
+          </div>
+          <div class="panel-body">
+            <p class="note warn" id="coverage-note">加载中…</p>
+            <p class="note">
+              <strong>时段分布、星期分布</strong>统计的是<strong>场次的首次观测时刻</strong>，
+              由采集任务决定。track 是定时任务，只在配置的时段跑，
+              所以图上的峰更可能是「采集时刻的峰」，而不是「开播规律的峰」。
+              等采集覆盖过完整一周后，这两张图才有判断价值。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 人气分布 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>人气分布</h2>
+            <span class="hint">按每场次的历史峰值分档</span>
+            <span class="spacer"></span>
+            <span class="hint" id="online-hint"></span>
+          </div>
+          <div class="panel-body">
+            <div id="online-chart" class="bar-chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 时段分布 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>开播时段分布</h2>
+            <span class="hint">东八区，按场次首次观测小时</span>
+            <span class="spacer"></span>
+            <span class="badge warn">反映采集时刻</span>
+          </div>
+          <div class="panel-body">
+            <div id="hour-chart" class="bar-chart bar-chart-hours"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 星期分布 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>星期分布</h2>
+            <span class="hint">按场次首次观测的自然日</span>
+            <span class="spacer"></span>
+            <span class="badge warn">反映采集时刻</span>
+          </div>
+          <div class="panel-body">
+            <div id="weekday-chart" class="bar-chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 时长分布 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>单场时长分布</h2>
+            <span class="hint">只统计已收尾的场次</span>
+            <span class="spacer"></span>
+            <span class="hint" id="dur-hint"></span>
+          </div>
+          <div class="panel-body">
+            <div id="dur-chart" class="bar-chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 人气 Top N -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>人气 Top 主播</h2>
+            <span class="hint">按历史峰值排，不是当前在线</span>
+            <span class="spacer"></span>
+            <button id="export-top-btn" class="ghost" title="导出当前 Top 榜为 CSV">导出 CSV</button>
+          </div>
+          <div class="panel-body">
+            <div class="table-scroll">
+              <table id="top-table">
+                <thead>
+                  <tr>
+                    <th class="num">#</th>
+                    <th>主播</th>
+                    <th class="num">历史峰值</th>
+                    <th class="num">场次数</th>
+                    <th class="num">场均峰值</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="6" class="u-dim" style="text-align: center; padding: 28px">
+                      加载中…
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 标题词频 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>标题高频词</h2>
+            <span class="hint">直播标题里的共同主题</span>
+            <span class="spacer"></span>
+            <span class="hint" id="word-hint"></span>
+          </div>
+          <div class="panel-body">
+            <div id="word-cloud" class="word-cloud"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 词频口径说明 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>这些数字的算法</h2>
+            <span class="hint">避免误解</span>
+          </div>
+          <div class="panel-body">
+            <p class="note">
+              <strong>词频</strong>没有用分词器（本项目零依赖），而是把标题按标点切开后
+              用 2~4 字滑窗统计频次，再丢弃「被更长词吃掉」的碎片与虚词，
+              最后按频次取前 N。所以它反映的是<strong>字面共现</strong>，
+              偶尔会漏掉跨词的组合，但足以看出主题倾向。
+            </p>
+            <p class="note">
+              <strong>时长</strong>用「首次观测 → 最后观测」的间隔。
+              这意味着它<strong>总是偏短</strong>：采集每小时一次，主播可能在两次采集之间就下播了，
+              量到的只是「我们知道他在播的那段时间」。真实时长只会更长，不会更短。
+            </p>
+            <p class="note">
+              <strong>人气</strong>取 track 每次刷新时的 <code>online</code>，
+              峰值是历次观测的最大值。采集频率决定了它可能错过真正的峰值，
+              所以这个数字同样是<strong>下限</strong>。
+            </p>
+            <p class="note warn">
+              所有统计都只基于<strong>已采集到的样本</strong>。样本量显示在每个图表右上角，
+              样本少的时候（尤其采集次数 &lt; 24）不要据此下结论。
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="/nav.js"></script>
+    <script src="/analyze.js"></script>
+  </body>
+</html>

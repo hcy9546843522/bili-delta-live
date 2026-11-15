@@ -1,0 +1,4 @@
+# 把浏览器里 live.bilibili.com 的 Cookie 整行粘贴到下面（保留这一行的注释可删）
+# 获取方式：登录 live.bilibili.com → F12 → Console → 执行 copy(document.cookie) → 粘贴到本文件
+# 示例（请替换成你自己的真实值）：
+# SESSDATA=xxxxxxxx%2Cxxxxxxxxxx%2Cxxxxxxxxxxxxxxxxxx%2Axxxxxxxx; bili_jct=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; buvid3=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXXinfoc; DedeUserID=12345678; DedeUserID__ckMd5=xxxxxxxxxxxxxxxx; sid=xxxxxxxx

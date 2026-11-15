@@ -1,0 +1,329 @@
+/*
+ * 房间明细页专属布局
+ *
+ * 目标：整页不出现滚动条，只保留表格内部一个滚动条。
+ *
+ * 做法：把「标题高频词」和「房间明细表」塞进同一个 panel，
+ * 用 flex 纵向排布 —— 高频词按内容高度、表格吃掉剩余空间并在内部滚动。
+ * 这样一屏即可看全，不用先滚页面再滚表格（两层滚动条非常难受）。
+ *
+ * 矮屏回退：窗口高度不足 640px 时放弃锁定高度，恢复整页滚动，
+ * 否则表格会被压成一条缝。
+ */
+
+body.rooms-page {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+body.rooms-page header {
+  flex: 0 0 auto;
+  margin-bottom: 14px;
+}
+
+body.rooms-page .wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 14px;
+}
+
+/* 单块面板：高频词 + 表格 + 分页都在这里面 */
+
+/*
+ * .wrap → section.fill → #rooms-panel 三层都要参与纵向 flex，
+ * 少一层就会断链：section 不设 flex，下面 panel 的 flex:1 就没有参照，
+ * 最终表格撑不到剩余高度，页面又会出现滚动条。
+ */
+body.rooms-page .wrap > section.fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+body.rooms-page #rooms-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+body.rooms-page #rooms-panel .panel-head {
+  /*
+   * 工具栏一行放得下就把搜索框收窄。
+   * 全局 .table-tools input[type=search] 是 width:100%，在这个面板里会把
+   * 其余下拉和按钮整套挤到第二行，光面板头就吃掉 12% 屏高。
+   * 收到 300px 后整行平铺，面板头回到一行高。
+   */
+  padding: 10px 14px;
+  gap: 10px;
+}
+
+body.rooms-page #rooms-panel .panel-head .table-tools {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+body.rooms-page #rooms-panel .table-tools input[type='search'] {
+  width: 300px;
+  flex: 0 1 300px;
+  min-width: 160px;
+}
+
+/* 标题与说明在窄屏下让位给工具栏，避免又挤成两行 */
+@media (max-width: 1180px) {
+  body.rooms-page #rooms-panel .panel-head .hint {
+    display: none;
+  }
+}
+
+/*
+ * 顶栏压成一行。
+ * 1365 宽的窗口下 brand(650) + tabs(508) + controls(479) = 1638px，
+ * 超出一屏就折成两行，白吃 93px（约 14% 屏高）。
+ * brand-sub 的「最新 · 时间 · 快照 N 小时前」与下方来源徽章完全重复，
+ * 在这个以看表格为主的页面上直接省掉，其余三块就能挤进一行。
+ */
+body.rooms-page .header-inner {
+  flex-wrap: nowrap;
+  gap: 12px;
+  padding: 10px 14px;
+}
+
+body.rooms-page .brand {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+body.rooms-page .brand-sub {
+  display: none;
+}
+
+body.rooms-page .tabs,
+body.rooms-page .controls {
+  flex: 0 0 auto;
+}
+
+/* 窗口再窄就放不下一行了，恢复换行，别让内容溢出被裁 */
+@media (max-width: 1100px) {
+  body.rooms-page .header-inner {
+    flex-wrap: wrap;
+  }
+}
+
+/* 来源徽章行：压缩成一行，不抢高度 */
+body.rooms-page #source-info {
+  flex: 0 0 auto;
+  margin: 0 0 10px !important;
+  padding: 0 2px;
+  font-size: 11.5px;
+}
+
+/* ---------------------------------------------------------------- 高频词条 */
+
+/* 高频词在面板内自成一条，与表格之间用分隔线隔开 */
+.kw-bar {
+  flex: 0 0 auto;
+  padding: 10px 16px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--panel);
+}
+
+/*
+ * 折叠态：只留一行标题，标签区收起来。
+ * 展开时这一块能吃掉近 20% 的屏高，而真正要看的表格被挤到一半以下；
+ * 折叠后表格拿到全部剩余高度。
+ */
+.kw-bar.collapsed {
+  padding: 7px 16px 8px;
+}
+
+.kw-bar.collapsed #keywords,
+.kw-bar.collapsed .kw-bar-head .hint {
+  display: none;
+}
+
+.kw-bar.collapsed .kw-bar-head {
+  margin-bottom: 0;
+}
+
+/* 折叠箭头：展开时转 90°（▸ → ▾） */
+.kw-toggle {
+  background: none;
+  border: none;
+  padding: 0 1px;
+  margin-right: -4px;
+  color: var(--text-faint);
+  cursor: pointer;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+.kw-toggle:hover {
+  color: var(--text);
+}
+
+.kw-toggle .caret {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+.kw-bar:not(.collapsed) .kw-toggle .caret {
+  transform: rotate(90deg);
+}
+
+.kw-bar-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.kw-bar-head .kw-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.2px;
+}
+
+.kw-bar-head .hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.kw-bar-head .spacer {
+  margin-left: auto;
+}
+
+/*
+ * 关键词区按内容自然撑开，绝不设 max-height —— 
+ * 一旦限定高度就会冒出一条独立滚动条，用户抱怨的正是「滚动条套滚动条」。
+ * 控制高度的办法是限制显示词数（见 app.js 的 slice），而不是这里截断。
+ * 窗口变窄时它会多占几行、表格相应变矮，但表格本身可滚，不影响可用性。
+ */
+.kw-bar #keywords {
+  gap: 6px;
+  overflow: visible;
+}
+
+.kw-bar #keywords .tag {
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+/* 细滚动条，避免抢视觉 */
+.kw-bar #keywords::-webkit-scrollbar {
+  width: 6px;
+}
+
+.kw-bar #keywords::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* ---------------------------------------------------------------- 表格区 */
+
+/* 表格吃掉面板剩余高度，滚动发生在这里 —— 整页唯一滚动条 */
+body.rooms-page .table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+}
+
+/* 分页条固定在面板底部 */
+body.rooms-page #rooms-panel .pager {
+  flex: 0 0 auto;
+}
+
+/* 状态列：不换行，颜色区分在播/已下播 */
+td.status-cell {
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+/* 「多久之前观测」用弱化色，避免盖过在播徽章本身 */
+td.status-cell .status-age {
+  color: var(--text-faint);
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+/*
+ * 开播时长列。
+ *
+ * 不换行 + 等宽数字：几百行里要能竖向扫「多久」，字宽抖动会让列看起来在跳。
+ * 刚开播（≤30 分钟）标绿，这一列的主要用途就是快速捞新开的直播间，
+ * 纯数字在密集表格里抓不住。
+ */
+td.dur-cell {
+  white-space: nowrap;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+td.dur-cell.fresh {
+  color: var(--green);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------ 只看在播开关 */
+
+/*
+ * 工具条里的 checkbox。
+ * 原生 checkbox 在深色主题下默认是浅灰方块，跟整套 UI 不搭，
+ * 所以只调强调色与尺寸，不自绘 —— 自绘会丢掉键盘可达性和系统焦点环。
+ */
+.switch-field {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.switch-field input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent, #23ade5);
+  flex: 0 0 auto;
+}
+
+/* 悬停时文字提亮，提示这一整块都可点 */
+.switch-field:hover {
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------------- 矮屏回退 */
+
+@media (max-height: 640px) {
+  body.rooms-page {
+    height: auto;
+    overflow: auto;
+    display: block;
+  }
+
+  body.rooms-page header {
+    margin-bottom: 26px;
+  }
+
+  body.rooms-page .wrap {
+    display: block;
+  }
+
+  body.rooms-page #rooms-panel {
+    display: block;
+  }
+
+  body.rooms-page .table-scroll {
+    max-height: 620px;
+  }
+}

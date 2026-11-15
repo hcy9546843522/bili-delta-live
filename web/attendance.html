@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>主播出勤 · 三角洲行动</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/attendance.css" />
+    <link rel="stylesheet" href="/ui.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-inner">
+        <div class="brand">
+          <h1><span class="brand-mark">●</span> 主播出勤</h1>
+          <span class="brand-sub" id="db-sub">加载中…</span>
+        </div>
+        <nav class="tabs" id="tabs"></nav>
+        <div class="controls"></div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <!-- 未就绪时的提示 -->
+      <div id="unavailable" style="display: none"></div>
+
+      <!-- 主播搜索 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>找主播</h2>
+            <span class="hint">输入昵称或 UID，支持模糊搜索</span>
+            <span class="spacer"></span>
+            <span class="hint" id="pool-hint"></span>
+          </div>
+          <div class="panel-body">
+            <input
+              type="search"
+              id="streamer-search"
+              placeholder="搜主播昵称或 UID…"
+              style="width: 100%"
+              autocomplete="off"
+            />
+            <!-- 手动入库：discover 只收「此刻在播」的人，没在播的主播靠这里补进池子 -->
+            <div class="add-bar">
+              <span class="add-label">添加主播</span>
+              <input
+                type="text"
+                id="add-input"
+                placeholder="填 UID 或直播间链接，例如 3546618353682597"
+                autocomplete="off"
+              />
+              <button id="btn-add" class="primary">写入池子</button>
+            </div>
+            <div id="add-result" class="add-result" style="display: none"></div>
+            <div id="search-results" class="result-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 主播详情（选中后显示） -->
+      <div id="detail" style="display: none">
+        <section>
+          <div class="panel">
+            <div class="panel-head">
+              <img id="face" class="face" alt="" />
+              <h2 id="streamer-name">—</h2>
+              <span class="hint" id="streamer-meta"></span>
+              <span class="spacer"></span>
+              <label class="field">
+                时间窗
+                <select id="window-days">
+                  <option value="30">近 30 天</option>
+                  <option value="60">近 60 天</option>
+                  <option value="120" selected>近 120 天</option>
+                  <option value="365">近一年</option>
+                  <option value="730">近两年</option>
+                </select>
+              </label>
+            </div>
+            <div class="panel-body">
+              <div class="stats" id="detail-stats"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 日历热力图 -->
+        <section>
+          <div class="panel">
+            <div class="panel-head">
+              <h2>出勤日历</h2>
+              <span class="hint">每格一天，色深 = 当天直播时长，悬停看详情</span>
+            </div>
+            <div class="panel-body">
+              <div id="calendar" class="calendar-wrap">
+                <div class="loading">加载中…</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 场次明细 -->
+        <section>
+          <div class="panel">
+            <div class="panel-head">
+              <h2>每次开播</h2>
+              <span class="hint" id="session-hint"></span>
+              <span class="spacer"></span>
+              <button id="btn-export-sessions">导出 CSV</button>
+            </div>
+            <div class="table-scroll">
+              <table id="sessions-table">
+                <thead>
+                  <tr>
+                    <th class="no-sort num">开播时刻</th>
+                    <th class="no-sort num">时长</th>
+                    <th class="no-sort num">峰值人气</th>
+                    <th class="no-sort">状态</th>
+                    <th class="no-sort">标题</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script src="/nav.js"></script>
+    <script src="/attendance.js"></script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+cookie.txt
+.wbi-cache.json
+data/
+data-http/
+node_modules/
+
+# SQLite 数据库（含 WAL / SHM 附属文件）
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

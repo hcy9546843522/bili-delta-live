@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>房间明细 · 三角洲行动</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/ui.css" />
+    <link rel="stylesheet" href="/rooms.css" />
+  </head>
+  <body class="rooms-page">
+    <header>
+      <div class="header-inner">
+        <div class="brand">
+          <h1><span class="brand-mark">●</span> 房间明细</h1>
+          <span class="brand-sub" id="meta-sub">加载中…</span>
+        </div>
+
+        <nav class="tabs" id="tabs"></nav>
+
+        <div class="controls">
+          <button id="refresh-btn" title="重新读取数据">刷新</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <!-- 来源信息 -->
+      <div id="source-info"></div>
+
+      <!--
+        高频词与房间明细合并为同一个面板（单块）：
+        整页锁定视口高度，只有表格内部滚动，
+        避免「页面一个滚动条 + 表格一个滚动条」的双层滚动。
+      -->
+      <section class="fill">
+        <div class="panel" id="rooms-panel">
+          <div class="panel-head">
+            <h2>房间明细</h2>
+            <span class="hint" id="rooms-hint">数据来自数据库，即最近一次 track 采集到的在播房间</span>
+            <span class="spacer"></span>
+            <div class="table-tools">
+              <input type="search" id="search-input" placeholder="搜主播 / 标题 / 房间号 / UID" />
+              <!--
+                直播状态筛选：快照是历史切片，拍下后陆续有人下播。
+                全展示时已下播的房间会淹没真正在播的，所以要能按状态筛。
+                判定与「直播状态」列同一口径（都走 liveStateOf）：
+                两处各写一套判断，早晚出现「标着在播却被筛掉」的自相矛盾。
+              -->
+              <label class="field" title="按此刻的直播状态筛选（依据最近一次 track 采集）">
+                状态
+                <select id="live-filter">
+                  <option value="all">全部</option>
+                  <option value="live">在播</option>
+                  <option value="dead">已下播</option>
+                  <option value="never">未采集</option>
+                </select>
+              </label>
+              <!--
+                开播时长筛选：主要用途是「快速捞刚开播的直播间」。
+                依据 live_time（B 站给的真实开播时刻）而非首次采集时间，
+                所以冷层主播几天才查一次也不会被误判成刚开播。
+                配合「开播」列点表头升序，就是「最新开播的排最前」。
+              -->
+              <label class="field" title="按已开播时长筛选，用来找刚开播的直播间">
+                开播
+                <select id="dur-filter">
+                  <option value="all">全部</option>
+                  <option value="30">≤ 30 分钟</option>
+                  <option value="60">≤ 1 小时</option>
+                  <option value="120">≤ 2 小时</option>
+                  <option value="360">≤ 6 小时</option>
+                </select>
+              </label>
+              <label class="field">
+                人气 ≥
+                <select id="min-online">
+                  <option value="0">全部</option>
+                  <option value="10">10</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="500">500</option>
+                  <option value="1000">1000</option>
+                </select>
+              </label>
+              <label class="field">
+                每页
+                <select id="page-size">
+                  <option value="25">25</option>
+                  <option value="50" selected>50</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                </select>
+              </label>
+              <button id="btn-clear-filter">清除筛选</button>
+              <button id="btn-export">导出 CSV</button>
+            </div>
+          </div>
+
+          <!--
+            标题高频词：面板内的一条，不单独占屏。
+            默认折叠 —— 它按内容撑高，展开时能吃掉一屏近 20% 的高度，
+            而用户 90% 的时间在看表格。折叠后只留一行标题，
+            需要按词筛选时点开即可（状态记在 localStorage）。
+          -->
+          <div class="kw-bar collapsed" id="kw-bar">
+            <div class="kw-bar-head">
+              <button id="kw-toggle" class="kw-toggle" aria-expanded="false" title="展开/收起高频词">
+                <span class="caret">▸</span>
+              </button>
+              <span class="kw-title">标题高频词</span>
+              <span class="hint" id="kw-hint">点词筛选标题</span>
+              <span class="spacer"></span>
+              <label class="field">
+                排序
+                <select id="kw-mode">
+                  <option value="count">按房间数</option>
+                  <option value="online">按覆盖人气</option>
+                </select>
+              </label>
+            </div>
+            <div class="tags" id="keywords">
+              <div class="loading">加载中…</div>
+            </div>
+          </div>
+
+          <div class="table-scroll">
+            <table id="rooms-table">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="pager">
+            <span class="info" id="pager-info">—</span>
+            <button id="btn-prev">上一页</button>
+            <span class="info" id="page-now" style="margin: 0 2px">1 / 1</span>
+            <button id="btn-next">下一页</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="cover-preview" class="cover-preview" hidden>
+      <img id="cover-preview-img" alt="" />
+    </div>
+
+    <script src="/nav.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

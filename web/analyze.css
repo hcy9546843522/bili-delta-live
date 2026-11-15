@@ -1,0 +1,248 @@
+/*
+ * 数据分析页样式
+ *
+ * 只放本页专有的东西（条形图、词云、Top 表）。
+ * 面板、统计卡、徽章等通用件全部复用 ui.css，避免两套视觉逐渐漂移。
+ */
+
+/* ---------------------------------------------------------------- 统计卡 */
+
+.stats .stat.warn {
+  border-color: rgba(240, 182, 83, 0.4);
+  background: var(--u-amber-soft);
+}
+
+.stats .stat .s {
+  color: var(--u-text-3);
+  font-size: var(--u-fs-xs);
+  margin-top: 2px;
+}
+
+.stats .stat.warn .s {
+  color: var(--u-amber);
+}
+
+/* ---------------------------------------------------------------- 条形图 */
+
+/*
+ * 高度用百分比而不是像素：容器给死高度，柱子按占比撑满，
+ * 这样换分辨率、加图形都不用重算布局。
+ */
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 200px;
+  padding: 8px 2px 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.bar-chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--u-text-3);
+  font-size: var(--u-fs-sm);
+  border: 1px dashed var(--u-line);
+  border-radius: var(--u-r);
+}
+
+.bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: 1 0 22px;
+  min-width: 22px;
+  height: 100%;
+  border-radius: var(--u-r-sm);
+  transition: background 0.12s;
+}
+
+.bar-col:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+/* 数字标签：为 0 的柱不显示，否则满屏 "0" 干扰读数 */
+.bar-num {
+  font-size: 10px;
+  color: var(--u-text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bar-col:hover .bar-num {
+  color: var(--u-text);
+}
+
+.bar-fill {
+  width: 100%;
+  max-width: 34px;
+  min-height: 0;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, var(--u-accent-2), var(--u-accent));
+  transition: filter 0.12s;
+}
+
+.bar-col:hover .bar-fill {
+  filter: brightness(1.25);
+}
+
+/* 零值柱：留一条极细的底线，表示「这个桶存在但为 0」，
+   与「桶根本不存在」区分开 */
+.bar-col.zero .bar-fill {
+  height: 2px !important;
+  background: var(--u-line);
+}
+
+.bar-label {
+  font-size: 10px;
+  color: var(--u-text-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 时段图 24 个桶，横排会挤，小屏强制横向滚动而不是压扁 */
+.bar-chart-hours .bar-col {
+  flex: 1 0 20px;
+  min-width: 20px;
+}
+
+/* ---------------------------------------------------------------- Top 表 */
+
+#top-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--u-fs-sm);
+}
+
+#top-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--u-surface-2);
+  color: var(--u-text-2);
+  font-weight: 600;
+  text-align: left;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--u-line);
+  white-space: nowrap;
+}
+
+#top-table tbody td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--u-line-soft);
+  vertical-align: middle;
+}
+
+#top-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+#top-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#top-table .uname {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+#top-table .uname .name-wrap {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+#top-table .uname a {
+  color: var(--u-text);
+  text-decoration: none;
+}
+
+#top-table .uname a:hover {
+  color: var(--u-accent);
+  text-decoration: underline;
+}
+
+#top-table .avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--u-surface-3);
+  flex: 0 0 24px;
+}
+
+#top-table .avatar-ph {
+  display: inline-block;
+}
+
+.mini-link {
+  color: var(--u-blue);
+  text-decoration: none;
+  font-size: var(--u-fs-xs);
+  white-space: nowrap;
+}
+
+.mini-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------- 词云 */
+
+/*
+ * 不用绝对定位的词云：那种做法在中文长词上很容易重叠或溢出。
+ * 这里用 flex 换行 + 字号差异，信息密度略低但绝不叠字。
+ */
+.word-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+  padding: 6px 2px;
+}
+
+.word {
+  color: var(--u-text);
+  line-height: 1.3;
+  cursor: default;
+  transition: color 0.12s;
+}
+
+.word:hover {
+  color: var(--u-accent);
+}
+
+/* ---------------------------------------------------------------- 说明 */
+
+.note code {
+  background: var(--u-surface-3);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.92em;
+}
+
+/* ---------------------------------------------------------------- 窄屏 */
+
+@media (max-width: 720px) {
+  .bar-chart {
+    height: 160px;
+  }
+
+  #top-table .uname .name-wrap {
+    max-width: 130px;
+  }
+
+  #top-table thead th:nth-child(5),
+  #top-table tbody td:nth-child(5) {
+    display: none; /* 场均峰值：窄屏优先砍掉次要列 */
+  }
+}

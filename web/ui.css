@@ -1,0 +1,626 @@
+/* ============================================================================
+ * ui.css —— 统一设计系统 + 顶部选项卡
+ *
+ * 加载顺序：style.css → (页面自己的 css) → ui.css
+ * 这样本文件能覆盖旧样式，而不需要改动旧文件里的任何规则。
+ *
+ * 设计取舍：
+ *   - 深色底不追求纯黑，用略带蓝调的 #0d1015，长时间看不刺眼
+ *   - 层级靠「背景亮度差 + 1px 边框」，而不是重阴影，避免界面发糊
+ *   - 强调色沿用 B 站粉（#fb7299），但只用在「当前选中 / 关键动作」
+ *   - 字号只保留 5 档，间距只用 4 的倍数，避免各页各写一套
+ * ========================================================================== */
+
+:root {
+  /* 底色：从最暗到最亮，层级越高越亮 */
+  --u-bg: #0d1015;
+  --u-bg-2: #12161d;
+  --u-surface: #161b23;
+  --u-surface-2: #1c222c;
+  --u-surface-3: #232a36;
+
+  /* 边框 */
+  --u-line: #262e3b;
+  --u-line-soft: #1e242e;
+
+  /* 文字 */
+  --u-text: #e8ecf4;
+  --u-text-2: #a3adc0;
+  --u-text-3: #6f7a8d;
+
+  /* 强调 */
+  --u-accent: #fb7299;
+  --u-accent-2: #ff9bb8;
+  --u-accent-soft: rgba(251, 114, 153, 0.13);
+  --u-blue: #4cc4f2;
+  --u-blue-soft: rgba(76, 196, 242, 0.13);
+  --u-green: #4ad2a3;
+  --u-green-soft: rgba(74, 210, 163, 0.13);
+  --u-amber: #f0b653;
+  --u-amber-soft: rgba(240, 182, 83, 0.13);
+  --u-red: #f2697a;
+  --u-red-soft: rgba(242, 105, 122, 0.13);
+
+  /* 形状 */
+  --u-r-sm: 6px;
+  --u-r: 10px;
+  --u-r-lg: 14px;
+
+  /* 阴影：只用于浮层，不给普通卡片加，避免发糊 */
+  --u-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+
+  /* 字号：只有 5 档 */
+  --u-fs-xs: 11px;
+  --u-fs-sm: 12.5px;
+  --u-fs: 13.5px;
+  --u-fs-lg: 16px;
+  --u-fs-xl: 21px;
+}
+
+/* 覆盖旧变量，让 style.css 里的既有规则也跟着变新 */
+:root {
+  --bg: var(--u-bg);
+  --bg-soft: var(--u-bg-2);
+  --panel: var(--u-surface);
+  --panel-2: var(--u-surface-2);
+  --border: var(--u-line);
+  --border-soft: var(--u-line-soft);
+  --text: var(--u-text);
+  --text-dim: var(--u-text-2);
+  --text-faint: var(--u-text-3);
+  --accent: var(--u-accent);
+  --accent-soft: var(--u-accent-soft);
+  --blue: var(--u-blue);
+  --blue-soft: var(--u-blue-soft);
+  --green: var(--u-green);
+  --amber: var(--u-amber);
+  --radius: var(--u-r);
+  --radius-sm: var(--u-r-sm);
+}
+
+/* ------------------------------------------------------------------ 基础 */
+
+body {
+  background: var(--u-bg);
+  font-size: var(--u-fs);
+  line-height: 1.6;
+  /* 一层极淡的径向光，避免整屏死黑；不参与布局 */
+  background-image: radial-gradient(1100px 460px at 50% -180px, rgba(251, 114, 153, 0.07), transparent 70%);
+  background-repeat: no-repeat;
+}
+
+.wrap {
+  max-width: 1400px;
+  padding: 0 24px 72px;
+}
+
+/* --------------------------------------------------------------- 顶栏 */
+
+header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(13, 16, 21, 0.88);
+  backdrop-filter: blur(16px) saturate(140%);
+  border-bottom: 1px solid var(--u-line-soft);
+  margin-bottom: 24px;
+}
+
+.header-inner {
+  max-width: 1400px;
+  padding: 0 24px;
+  min-height: 60px;
+  gap: 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.brand h1 {
+  font-size: var(--u-fs-lg);
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.brand .brand-mark {
+  color: var(--u-accent);
+  font-size: 13px;
+  /* 小圆点带一圈光晕，作为品牌标记 */
+  text-shadow: 0 0 12px var(--u-accent);
+}
+
+.brand .brand-sub {
+  font-size: var(--u-fs-sm);
+  color: var(--u-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------------- 顶部选项卡 */
+
+/*
+ * Tabs 做成「分段控件」：一个圆角容器内若干等距项，
+ * 选中项浮起（背景更亮 + 白字），未选中项只有灰字，鼠标悬停才亮。
+ * 相比下划线式 tab，它更像"切换视图"，也更省纵向空间。
+ */
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--u-bg-2);
+  border: 1px solid var(--u-line-soft);
+  border-radius: 999px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 15px;
+  border-radius: 999px;
+  font-size: var(--u-fs-sm);
+  font-weight: 550;
+  color: var(--u-text-3);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s, background 0.15s;
+}
+
+.tab:hover {
+  color: var(--u-text-2);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tab.active {
+  color: #fff;
+  background: linear-gradient(180deg, var(--u-surface-3), var(--u-surface-2));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* 选中项左侧的小圆点，让当前页一眼可辨 */
+.tab.active::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--u-accent);
+  box-shadow: 0 0 8px var(--u-accent);
+}
+
+.tab .tab-badge {
+  min-width: 17px;
+  padding: 0 5px;
+  height: 17px;
+  line-height: 17px;
+  border-radius: 9px;
+  font-size: var(--u-fs-xs);
+  font-weight: 600;
+  text-align: center;
+  background: var(--u-red-soft);
+  color: var(--u-red);
+}
+
+.tab .tab-badge:empty {
+  display: none;
+}
+
+/* ---------------------------------------------- 控件：按钮 / 输入 / 选择 */
+
+button {
+  padding: 7px 14px;
+  border-radius: var(--u-r-sm);
+  border: 1px solid var(--u-line);
+  background: var(--u-surface-2);
+  color: var(--u-text);
+  font-size: var(--u-fs-sm);
+  font-weight: 550;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.06s;
+}
+
+button:hover {
+  background: var(--u-surface-3);
+  border-color: #324052;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button.active,
+button.primary {
+  background: var(--u-accent);
+  border-color: var(--u-accent);
+  color: #1a0a10;
+  font-weight: 650;
+}
+
+button.primary:hover {
+  background: var(--u-accent-2);
+  border-color: var(--u-accent-2);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+button.ghost {
+  background: transparent;
+  border-color: var(--u-line-soft);
+  color: var(--u-text-2);
+}
+
+button.ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--u-text);
+}
+
+label.field {
+  font-size: var(--u-fs-xs);
+  color: var(--u-text-3);
+  gap: 6px;
+}
+
+input,
+select,
+textarea {
+  padding: 6px 10px;
+  border-radius: var(--u-r-sm);
+  border: 1px solid var(--u-line);
+  background: var(--u-surface);
+  color: var(--u-text);
+  font-size: var(--u-fs-sm);
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: #324052;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--u-accent);
+  background: var(--u-surface-2);
+  box-shadow: 0 0 0 3px var(--u-accent-soft);
+}
+
+input::placeholder {
+  color: var(--u-text-3);
+}
+
+/* --------------------------------------------------------- 卡片 / 面板 */
+
+.panel {
+  background: var(--u-surface);
+  border: 1px solid var(--u-line-soft);
+  border-radius: var(--u-r-lg);
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--u-line-soft);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.022), transparent);
+}
+
+.panel-head h2 {
+  font-size: var(--u-fs);
+  font-weight: 650;
+  letter-spacing: 0.2px;
+}
+
+.panel-head .hint {
+  font-size: var(--u-fs-xs);
+  color: var(--u-text-3);
+  font-weight: 400;
+}
+
+.panel-body {
+  padding: 18px;
+}
+
+/* ------------------------------------------------------------- 统计卡 */
+
+.stats {
+  gap: 12px;
+}
+
+.stat {
+  padding: 15px 17px;
+  background: var(--u-surface);
+  border: 1px solid var(--u-line-soft);
+  border-radius: var(--u-r);
+  transition: border-color 0.15s;
+}
+
+.stat:hover {
+  border-color: var(--u-line);
+}
+
+.stat .k {
+  font-size: var(--u-fs-xs);
+  color: var(--u-text-3);
+  letter-spacing: 0.4px;
+  text-transform: none;
+}
+
+.stat .v {
+  font-size: var(--u-fs-xl);
+  font-weight: 660;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat .v small {
+  font-size: var(--u-fs-xs);
+  font-weight: 500;
+  color: var(--u-text-3);
+}
+
+/* --------------------------------------------------------------- 表格 */
+
+table {
+  font-size: var(--u-fs-sm);
+}
+
+thead th {
+  padding: 10px 12px;
+  font-size: var(--u-fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--u-text-3);
+  background: var(--u-bg-2);
+  border-bottom: 1px solid var(--u-line);
+}
+
+tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--u-line-soft);
+}
+
+tbody tr:hover {
+  background: rgba(255, 255, 255, 0.028);
+}
+
+td.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ 标签 / 徽章 */
+
+.tag {
+  border-radius: 999px;
+  font-size: var(--u-fs-xs);
+  padding: 3px 9px;
+  border: 1px solid var(--u-line);
+  background: var(--u-surface-2);
+  color: var(--u-text-2);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.tag:hover {
+  border-color: var(--u-accent);
+  color: var(--u-text);
+}
+
+.tag.active {
+  background: var(--u-accent-soft);
+  border-color: var(--u-accent);
+  color: var(--u-accent);
+}
+
+/* 语义徽章：用于状态标识（直播中 / 已结束 / 失败 …） */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--u-fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge.live {
+  background: var(--u-red-soft);
+  color: var(--u-red);
+}
+
+.badge.ok {
+  background: var(--u-green-soft);
+  color: var(--u-green);
+}
+
+.badge.warn {
+  background: var(--u-amber-soft);
+  color: var(--u-amber);
+}
+
+.badge.err {
+  background: var(--u-red-soft);
+  color: var(--u-red);
+}
+
+.badge.info {
+  background: var(--u-blue-soft);
+  color: var(--u-blue);
+}
+
+.badge.mute {
+  background: var(--u-surface-3);
+  color: var(--u-text-3);
+}
+
+/* 直播中的红点，带呼吸动画 */
+.badge.live::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--u-red);
+  animation: u-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes u-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* 尊重系统「减少动态效果」偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .badge.live::before {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------- 空态 / 加载 / 错误 */
+
+.empty,
+.loading,
+.error {
+  padding: 34px 16px;
+  border-radius: var(--u-r);
+  font-size: var(--u-fs-sm);
+  border: 1px dashed var(--u-line);
+  background: rgba(255, 255, 255, 0.012);
+  color: var(--u-text-3);
+}
+
+.error {
+  border-style: solid;
+  border-color: rgba(242, 105, 122, 0.4);
+  background: var(--u-red-soft);
+  color: #ffb3bd;
+}
+
+.error code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: var(--u-fs-xs);
+}
+
+/* --------------------------------------------------------------- 链接 */
+
+a {
+  color: var(--u-blue);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+a:hover {
+  color: #7ad7fa;
+}
+
+/* 顶部导航（旧式，保留兼容） */
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: var(--u-r-sm);
+  font-size: var(--u-fs-sm);
+  font-weight: 550;
+  color: var(--u-text-2);
+  border: 1px solid var(--u-line-soft);
+  background: var(--u-surface);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.nav-link:hover {
+  color: var(--u-text);
+  background: var(--u-surface-2);
+  border-color: var(--u-line);
+}
+
+/* --------------------------------------------------------- 分页器 */
+
+.pager {
+  gap: 6px;
+  padding: 12px 0 2px;
+  font-size: var(--u-fs-sm);
+}
+
+.pager .info {
+  font-size: var(--u-fs-xs);
+  color: var(--u-text-3);
+}
+
+/* ------------------------------------------------- 通用小工具 */
+
+.u-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.u-row.end {
+  justify-content: flex-end;
+}
+
+.u-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.u-dim {
+  color: var(--u-text-3);
+}
+
+.u-mono {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: var(--u-fs-xs);
+}
+
+.u-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 截图/窄屏：把 tabs 与控件折行，不让它们把顶栏撑爆 */
+@media (max-width: 860px) {
+  .header-inner {
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    gap: 10px;
+  }
+
+  .brand {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .wrap {
+    padding: 0 14px 56px;
+  }
+
+  .tabs {
+    width: 100%;
+    order: 3;
+  }
+}
