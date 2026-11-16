@@ -1331,6 +1331,17 @@ function bindCoverPreview() {
 
   const PAD = 14; // 与光标的间距
 
+  /*
+   * 已解码完成、可以立刻上屏的图。
+   *
+   * 直接给 <img> 换一个没加载过的 src，浏览器会先把元素清空 ——
+   * 那一帧露出的就是浮层的空背景，也就是「从一张移到另一张时闪一下」。
+   * 所以换图前先预加载，确认能画出来再改 src；等待期间浮层保持显示上一张。
+   */
+  const ready = new Set();
+  // 正在等加载的目标；只有它自己回来后才有资格上屏，避免快速划过时旧请求回填
+  let pending = null;
+
   function place(clientX, clientY) {
     // 用实测尺寸，别硬编码：盒子含 4px 内边距 + 1px 边框，实际比图片大一圈，
     // 早先按图片尺寸算高度会让浮层底部溢出视口。
@@ -1356,13 +1367,46 @@ function bindCoverPreview() {
   function show(target, clientX, clientY) {
     const full = target.dataset.full || target.src;
     if (!full) return;
-    if (img.getAttribute('src') !== full) img.src = full;
+
+    // 先把浮层摆好（位置跟着鼠标走，切换图不该有任何位移）
     box.hidden = false;
     place(clientX, clientY);
+
+    if (img.getAttribute('src') === full) return; // 已经是这张，什么都不用做
+
+    if (ready.has(full)) {
+      // 之前加载过：从缓存换 src 是同步渲染的，不会有空白帧
+      img.src = full;
+      return;
+    }
+
+    // 浮层里还没有任何图（首次悬停）：先用格子里那张已解码的缩略图占位，
+    // 否则会看到一块空的 400×225 背景。占位不记入 ready，稍后照样会被大图替换。
+    if (!img.getAttribute('src')) {
+      const thumb = target.currentSrc || target.src;
+      if (thumb) img.src = thumb;
+    }
+
+    if (pending === full) return; // 已经在加载这一张，别重复发请求
+    pending = full;
+
+    const pre = new Image();
+    pre.onload = () => {
+      ready.add(full);
+      if (pending !== full) return; // 期间用户已划到别的图，这次结果作废
+      pending = null;
+      img.src = full;
+    };
+    pre.onerror = () => {
+      // 加载失败就保持原样，留着上一张也比换成破图好
+      if (pending === full) pending = null;
+    };
+    pre.src = full;
   }
 
   function hide() {
     box.hidden = true;
+    // 不清 img.src：下次回到同一张图能立刻显示，省一次请求
   }
 
   // 事件委托：表格会整块重渲染，逐行绑监听会失效
@@ -1388,7 +1432,19 @@ function bindCoverPreview() {
   table.addEventListener('mouseout', (e) => {
     const t = e.target.closest('.room-cover');
     if (!t) return;
-    // 移入浮层自身不隐藏（浮层 pointer-events:none，正常不会触发）
+
+    /*
+     * 从一张缩略图移到另一张时，浏览器会先发旧图的 mouseout、再发新图的 mouseover。
+     * 原来这里无条件 hide()，于是每换一张都要「关掉→再打开」，
+     * 画面上就是你说的闪一下。
+     *
+     * relatedTarget 是鼠标正要去的地方 —— 它仍然是缩略图，说明只是换了张图，
+     * 浮层该继续留着，交给随后的 mouseover 直接换图；
+     * 只有真的离开了所有缩略图（移到空白、别的列、页面外）才收起。
+     */
+    const to = e.relatedTarget;
+    if (to && to.closest && to.closest('.room-cover')) return;
+
     hide();
   });
 
