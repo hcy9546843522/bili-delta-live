@@ -106,8 +106,10 @@ const state = {
   // 直播状态筛选：快照拍下后陆续有人下播，全展示时几百个已下播房间会淹没有效信息。
   // 'all' | 'live' | 'dead' | 'never'，与「直播状态」列同一口径（都走 liveStateOf）。
   liveFilter: 'all',
-  page: 1,
-  pageSize: 50,
+  // 无限滚动：不翻页。没有「当前页」，只有「已渲染到第几行」。
+  // shown 是当前已渲染的行数，滚到接近底部时 appendRows() 再追加一批。
+  batchSize: 100,
+  shown: 100,
   kwMode: 'count',
   // 趋势图指标：'live' = 在播房间数，'pool' = 主播池规模
   // （collect_runs 不记录合计人气，所以不提供那个选项）
@@ -209,7 +211,8 @@ async function loadRoomsFromDb() {
       observed_at: observedAt || null,
     };
     state.rooms = rooms;
-    state.page = 1;
+    // 数据整批换了，已渲染行数回到第一批，免得停在上次的「已加载 500 行」
+    state.shown = state.batchSize;
     render();
   } catch (err) {
     // 数据库不可用（没跑过 track / 库被删）就如实说明。
@@ -891,16 +894,50 @@ function visibleColumns() {
   return COLUMNS;
 }
 
+/** 单行 HTML。rank 是过滤后列表里的序号，跨批次连续（不随追加归零） */
+function rowHtml(r, rank, showCover) {
+  const hot = (r.online || 0) >= 1000 ? ' class="hot"' : '';
+  return `<tr>
+    <td class="rank">${rank}</td>
+    ${showCover ? coverCell(r) : ''}
+    ${unameCell(r)}
+    ${statusCell(r)}
+    ${durCell(r)}
+    <td class="num"${hot}>${fmt(r.online || 0)}</td>
+    <td class="room"><a href="${esc(
+      r.url || `https://live.bilibili.com/${r.roomid}`
+    )}" target="_blank" rel="noreferrer">${esc(r.roomid)}</a></td>
+    <td class="room"><a href="${esc(
+      r.user_url || `https://space.bilibili.com/${r.uid}`
+    )}" target="_blank" rel="noreferrer">${esc(r.uid)}</a></td>
+    <td class="title-cell" title="${esc(r.title || '')}">${esc(r.title || '')}</td>
+  </tr>`;
+}
+
+/** 底部那行「已显示 X / 共 Y 条」，顺带提示还能不能继续滚 */
+function updateListBar(total, shown) {
+  const info = $('#pager-info');
+  if (info) {
+    info.textContent = total === 0 ? '0 条' : `已显示 ${fmt(shown)} / 共 ${fmt(total)} 条`;
+  }
+  const st = $('#load-state');
+  if (st) {
+    if (total === 0) st.textContent = '';
+    else st.textContent = shown < total ? '继续向下滚动加载更多' : '已全部加载';
+  }
+}
+
 function renderTable() {
   const tableEl = $('#rooms-table');
   if (!tableEl) return;
   const rows = filtered();
   const total = rows.length;
-  const pageSize = state.pageSize;
-  const maxPage = Math.max(1, Math.ceil(total / pageSize));
-  if (state.page > maxPage) state.page = maxPage;
-  const start = (state.page - 1) * pageSize;
-  const slice = rows.slice(start, start + pageSize);
+  // 无限滚动：只渲染前 shown 行，剩下的等滚到底部再追加。
+  // 一次铺满几千行会让首屏变慢（每行两个懒加载图片），也会让表头吸顶滚动发涩。
+  // 注意 shown 只作上限用、不回写 state.shown：排序或筛选让行数回升时，
+  // 回写会把「已加载 500 行」压成临时结果的行数，再切回来就只剩几十行。
+  const shown = Math.min(state.shown, total);
+  const slice = rows.slice(0, shown);
 
   // 表头
   const cols = visibleColumns();
@@ -923,38 +960,69 @@ function renderTable() {
   if (!slice.length) {
     tbody.innerHTML = `<tr><td colspan="${cols.length}"><div class="empty">没有符合条件的房间</div></td></tr>`;
   } else {
-    tbody.innerHTML = slice
-      .map((r, i) => {
-        const rank = start + i + 1;
-        const hot = (r.online || 0) >= 1000 ? ' class="hot"' : '';
-        return `<tr>
-          <td class="rank">${rank}</td>
-          ${showCover ? coverCell(r) : ''}
-          ${unameCell(r)}
-          ${statusCell(r)}
-          ${durCell(r)}
-          <td class="num"${hot}>${fmt(r.online || 0)}</td>
-          <td class="room"><a href="${esc(
-            r.url || `https://live.bilibili.com/${r.roomid}`
-          )}" target="_blank" rel="noreferrer">${esc(r.roomid)}</a></td>
-          <td class="room"><a href="${esc(
-            r.user_url || `https://space.bilibili.com/${r.uid}`
-          )}" target="_blank" rel="noreferrer">${esc(r.uid)}</a></td>
-          <td class="title-cell" title="${esc(r.title || '')}">${esc(r.title || '')}</td>
-        </tr>`;
-      })
-      .join('');
+    tbody.innerHTML = slice.map((r, i) => rowHtml(r, i + 1, showCover)).join('');
   }
 
-  // 分页
-  $('#pager-info').textContent =
-    total === 0
-      ? '0 条'
-      : `${fmt(start + 1)}–${fmt(Math.min(start + pageSize, total))} / 共 ${fmt(total)} 条`;
+  updateListBar(total, shown);
+}
 
-  $('#page-now').textContent = `${state.page} / ${maxPage}`;
-  $('#btn-prev').disabled = state.page <= 1;
-  $('#btn-next').disabled = state.page >= maxPage;
+/**
+ * 追加下一批。
+ *
+ * 不是「重新渲染前 N 行」，而是往现有 tbody 里续写 —— 这样已经加载的封面
+ * 不会被重新请求，滚动位置也不会跳。表头不用动，列不随行变。
+ */
+function appendRows() {
+  const tbody = $('#rooms-table tbody');
+  if (!tbody) return;
+  const rows = filtered();
+  const total = rows.length;
+  if (state.shown >= total) return;
+
+  const showCover = visibleColumns().some((c) => c.key === 'cover');
+  const next = Math.min(state.shown + state.batchSize, total);
+  const html = rows
+    .slice(state.shown, next)
+    .map((r, i) => rowHtml(r, state.shown + i + 1, showCover))
+    .join('');
+
+  // 空态占位那行要先踢掉，否则新行会接在「没有符合条件的房间」下面
+  const empty = tbody.querySelector('.empty');
+  if (empty) tbody.innerHTML = '';
+  tbody.insertAdjacentHTML('beforeend', html);
+
+  state.shown = next;
+  updateListBar(rows.length, next);
+}
+
+/**
+ * 是否该再追加一批。
+ *
+ * 触发条件不是「正好到底」，而是「距底部不足 0.6 屏」—— 提前一点加载，
+ * 用户感觉不到停顿。另一个用途是兜底：筛选后行数少、内容撑不满可视区时
+ * 根本不会有 scroll 事件，得由渲染流程主动补，否则永远看不到第二批。
+ */
+function maybeLoadMore() {
+  const box = document.querySelector('.table-scroll');
+  if (!box) return;
+
+  // 先看几何位置，再碰数据：filtered() 是全量筛选 + 排序，
+  // 而 scroll 事件高频触发，绝大多数时候根本不需要加载，
+  // 先算它等于每次滚动都把整张表重排一遍。
+  const nearBottom = () =>
+    box.scrollHeight - box.scrollTop - box.clientHeight <= box.clientHeight * 0.6;
+  if (!nearBottom()) return;
+
+  const rows = filtered();
+  if (state.shown >= rows.length) return;
+
+  const before = state.shown;
+  appendRows();
+  if (state.shown === before) return;
+
+  // 追加一批后仍没填满可视区（窗口很高 / 批次很小），下一帧接着补，
+  // 直到内容溢出或数据用尽。用 rAF 而不是同步 while，避免被超大数据卡死。
+  if (nearBottom()) requestAnimationFrame(maybeLoadMore);
 }
 
 /* ================================================================ 渲染总控 */
@@ -985,6 +1053,9 @@ function render() {
     renderTable();
     drawTrend();
     renderSourceInfo();
+    // 兜底补填：行数少 / 窗口很高时内容填不满可视区，就永远不会有
+    // scroll 事件来触发加载。这里主动检查一次，必要时接着追加。
+    maybeLoadMore();
   });
 }
 
@@ -1117,6 +1188,8 @@ function bindEvents() {
       state.sort.key = key;
       state.sort.dir = key === 'online' ? 'desc' : 'asc';
     }
+    // 换了排序就是一组新顺序，已展开的行数作废，回到第一批从头看
+    state.shown = state.batchSize;
     render();
   });
 
@@ -1126,21 +1199,22 @@ function bindEvents() {
     const v = e.target.value;
     searchTimer = setTimeout(() => {
       state.query = v;
-      state.page = 1;
+      state.shown = state.batchSize;
       render();
     }, 160);
   });
 
-  // 直播状态筛选：切换后回第 1 页，否则停在第 20 页会看到空白
+  // 筛选条件变了就回到第一批 —— 不重置的话，上一轮已展开的 500 行
+  // 会让新结果一次性铺满，筛选等于没生效。
   on('#live-filter', 'change', (e) => {
     state.liveFilter = e.target.value;
-    state.page = 1;
+    state.shown = state.batchSize;
     render();
   });
 
   on('#min-online', 'change', (e) => {
     state.minOnline = Number(e.target.value) || 0;
-    state.page = 1;
+    state.shown = state.batchSize;
     render();
   });
 
@@ -1151,37 +1225,27 @@ function bindEvents() {
     if (state.durFilter !== 'all') {
       state.sort = { key: 'duration', dir: 'asc' };
     }
-    state.page = 1;
+    state.shown = state.batchSize;
     render();
   });
 
-  on('#page-size', 'change', (e) => {
-    state.pageSize = Number(e.target.value) || 50;
-    state.page = 1;
+  on('#batch-size', 'change', (e) => {
+    state.batchSize = Number(e.target.value) || 100;
+    state.shown = state.batchSize;
     render();
   });
 
-  on('#btn-prev', 'click', () => {
-    if (state.page > 1) {
-      state.page--;
-      render();
-    }
-  });
-
-  on('#btn-next', 'click', () => {
-    const maxPage = Math.max(1, Math.ceil(filtered().length / state.pageSize));
-    if (state.page < maxPage) {
-      state.page++;
-      render();
-    }
-  });
+  // 滚动加载：表格自己的 .table-scroll 是唯一的滚动容器（页面不滚）。
+  // passive 是为了不拖慢滚动本身。
+  const scrollBox = document.querySelector('.table-scroll');
+  if (scrollBox) scrollBox.addEventListener('scroll', maybeLoadMore, { passive: true });
 
   on('#keywords', 'click', (e) => {
     const btn = e.target.closest('.tag');
     if (!btn) return;
     const w = btn.dataset.word;
     state.keyword = state.keyword === w ? '' : w;
-    state.page = 1;
+    state.shown = state.batchSize;
     render();
   });
 
@@ -1203,7 +1267,7 @@ function bindEvents() {
     state.minOnline = 0;
     state.liveFilter = 'all';
     state.durFilter = 'all';
-    state.page = 1;
+    state.shown = state.batchSize;
     const si = $('#search-input');
     if (si) si.value = '';
     const mo = $('#min-online');

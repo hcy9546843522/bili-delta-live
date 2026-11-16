@@ -238,9 +238,17 @@ body.rooms-page .table-scroll {
   overflow: auto;
 }
 
-/* 分页条固定在面板底部 */
+/* 底部状态条固定在面板底部（已不再是分页器，只说明加载进度） */
 body.rooms-page #rooms-panel .pager {
   flex: 0 0 auto;
+  padding: 8px 16px 10px;
+}
+
+/* 右侧那条「继续向下滚动 / 已全部加载」靠右，别跟计数挤在一起 */
+body.rooms-page #rooms-panel .pager #load-state {
+  margin-right: 0;
+  margin-left: auto;
+  opacity: 0.85;
 }
 
 /* 状态列：不换行，颜色区分在播/已下播 */

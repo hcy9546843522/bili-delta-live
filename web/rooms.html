@@ -83,13 +83,14 @@
                   <option value="1000">1000</option>
                 </select>
               </label>
-              <label class="field">
-                每页
-                <select id="page-size">
-                  <option value="25">25</option>
-                  <option value="50" selected>50</option>
-                  <option value="100">100</option>
+              <!-- 无限滚动没有「页」，这里控制的是每批追加多少行 -->
+              <label class="field" title="滚动到底部时每次追加的行数">
+                每批
+                <select id="batch-size">
+                  <option value="50">50</option>
+                  <option value="100" selected>100</option>
                   <option value="200">200</option>
+                  <option value="500">500</option>
                 </select>
               </label>
               <button id="btn-clear-filter">清除筛选</button>
@@ -131,11 +132,13 @@
             </table>
           </div>
 
-          <div class="pager">
+          <!--
+            无限滚动：没有页码、没有翻页按钮。
+            滚到接近底部时自动追加下一批，这里只说明「已显示多少 / 共多少」。
+          -->
+          <div class="pager" id="list-bar">
             <span class="info" id="pager-info">—</span>
-            <button id="btn-prev">上一页</button>
-            <span class="info" id="page-now" style="margin: 0 2px">1 / 1</span>
-            <button id="btn-next">下一页</button>
+            <span class="info" id="load-state"></span>
           </div>
         </div>
       </section>
