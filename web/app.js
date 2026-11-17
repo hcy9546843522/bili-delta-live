@@ -949,7 +949,15 @@ function renderTable() {
     cols.map((c) => {
       const active = state.sort.key === c.key;
       const arrow = active ? `<span class="arrow">${state.sort.dir === 'desc' ? '▼' : '▲'}</span>` : '';
-      return `<th class="${c.sortable ? '' : 'no-sort'}" data-key="${c.sortable ? c.key : ''}">${esc(
+      /*
+       * 列自带的类必须跟着表头一起输出。
+       * 数据格用 td.num / td.rank 右对齐，表头若不带同一个类就留在左侧，
+       * 看起来像整列错位；其余类（cover-cell / status-cell 等）虽然规则都写了
+       * td 前缀、对 th 无副作用，但保持「表头与数据格同类」更不容易再漏。
+       */
+      const align = c.cls ? ` ${c.cls}` : '';
+      const cls = (c.sortable ? '' : 'no-sort') + align;
+      return `<th class="${cls}" data-key="${c.sortable ? c.key : ''}">${esc(
         c.label
       )}${arrow}</th>`;
     }).join('') +

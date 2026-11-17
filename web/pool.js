@@ -35,13 +35,14 @@ const state = {
 
 /** 列定义。key 必须同时是后端 SORT 白名单里的键，加列要同步 db.js 的 poolList */
 const COLUMNS = [
-  { key: '', label: '#', sortable: false },
+  // cls 是表头与数据格共用的对齐类，详见 renderHead()
+  { key: '', label: '#', sortable: false, cls: 'num' },
   { key: 'uname', label: '主播', sortable: true },
   { key: 'tier', label: '分层', sortable: true },
   { key: 'last_active', label: '上次活跃', sortable: true },
-  { key: 'session_count', label: '场次', sortable: true },
-  { key: 'total_seconds', label: '累计时长', sortable: true },
-  { key: 'peak_online', label: '峰值人气', sortable: true },
+  { key: 'session_count', label: '场次', sortable: true, cls: 'num' },
+  { key: 'total_seconds', label: '累计时长', sortable: true, cls: 'num' },
+  { key: 'peak_online', label: '峰值人气', sortable: true, cls: 'num' },
   { key: 'first_seen_at', label: '入库时间', sortable: true },
 ];
 
@@ -227,10 +228,13 @@ function renderHead() {
   thead.innerHTML =
     '<tr>' +
     COLUMNS.map((c) => {
-      if (!c.sortable) return `<th class="no-sort">${escapeHtml(c.label)}</th>`;
+      // 列自带的对齐类必须跟着表头一起输出：数据格是 td.num（右对齐），
+      // 表头若不带同一个类就留在左边，看起来像错位了一列。
+      const align = c.cls ? ` ${c.cls}` : '';
+      if (!c.sortable) return `<th class="no-sort${align}">${escapeHtml(c.label)}</th>`;
       const active = curKey === c.key;
       const arrow = active ? `<span class="arrow">${dir === 'desc' ? '▼' : '▲'}</span>` : '';
-      const cls = active ? 'sortable active' : 'sortable';
+      const cls = (active ? 'sortable active' : 'sortable') + align;
       const tip = active
         ? `当前按「${c.label}」${dir === 'desc' ? '降序' : '升序'}，点击切换`
         : `按「${c.label}」排序`;

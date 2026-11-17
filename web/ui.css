@@ -411,6 +411,20 @@ td.num {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * 数字列的表头必须跟内容同向对齐。
+ *
+ * style.css 把 thead th 统一设成 text-align:left，而数字格子（td.num / td.rank）
+ * 是右对齐 —— 表头贴格子左边、数字贴格子右边，看起来就像错位了一列。
+ * 这里给表头补上同样的右对齐；`thead th.num` 的特异性(0,1,2)高于
+ * style.css 的 `thead th`(0,0,2)，与加载顺序无关，所以每个页面都生效，
+ * 不必逐页再写一遍。
+ */
+thead th.num,
+thead th.rank {
+  text-align: right;
+}
+
 /* ------------------------------------------------------------ 标签 / 徽章 */
 
 .tag {
