@@ -532,6 +532,9 @@ const server = http.createServer((req, res) => {
   if (p === '/analyze.html') return sendFile(res, path.join(WEB, 'analyze.html'));
   if (p === '/analyze.js') return sendFile(res, path.join(WEB, 'analyze.js'));
   if (p === '/analyze.css') return sendFile(res, path.join(WEB, 'analyze.css'));
+  if (p === '/pool.html') return sendFile(res, path.join(WEB, 'pool.html'));
+  if (p === '/pool.js') return sendFile(res, path.join(WEB, 'pool.js'));
+  if (p === '/pool.css') return sendFile(res, path.join(WEB, 'pool.css'));
 
   if (p === '/api/sources') return sendJson(res, listSources());
 
@@ -732,6 +735,30 @@ const server = http.createServer((req, res) => {
       return sendJson(res, { available: true, ...dbModule.analyze(d, { topN, wordN }) });
     } catch (err) {
       return sendJson(res, { available: false, error: `聚合失败：${err.message}` }, 200);
+    }
+  }
+
+  // 主播池：GET /api/pool?limit=100&offset=0&sort=last_active&dir=desc&tier=hot&mode=discover&q=关键词
+  //
+  // 与 /api/analyze 分开的原因：那个接口是六张图的整体快照，重算一次要重新
+  // 聚合全库；而主播池是「翻页 + 筛选」的高频交互，每次都全量重算会让翻页很卡。
+  // 这里所有筛选和分页都下推到 SQL，一次只取当前页那一百行。
+  if (p === '/api/pool') {
+    const d = getDb();
+    if (!d) return sendJson(res, { available: false, error: dbError, rows: [] }, 200);
+
+    const limit = Math.min(Math.max(Number(u.searchParams.get('limit')) || 100, 1), 500);
+    const offset = Math.max(Number(u.searchParams.get('offset')) || 0, 0);
+    const sort = u.searchParams.get('sort') || 'last_active';
+    const dir = u.searchParams.get('dir') || 'desc';
+    const tier = u.searchParams.get('tier') || null;
+    const mode = u.searchParams.get('mode') || null;
+    const q = u.searchParams.get('q') || '';
+
+    try {
+      return sendJson(res, { available: true, limit, offset, ...dbModule.poolList(d, { limit, offset, sort, dir, tier, mode, q }) });
+    } catch (err) {
+      return sendJson(res, { available: false, error: `查询失败：${err.message}`, rows: [] }, 200);
     }
   }
 

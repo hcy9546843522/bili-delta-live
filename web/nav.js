@@ -22,6 +22,7 @@
     { id: 'rooms', href: '/rooms.html', label: '房间明细' },
     { id: 'attendance', href: '/attendance.html', label: '主播出勤' },
     { id: 'discoveries', href: '/discoveries.html', label: '新发现' },
+    { id: 'pool', href: '/pool.html', label: '主播池' },
     { id: 'analyze', href: '/analyze.html', label: '数据分析' },
     { id: 'logs', href: '/logs.html', label: '运行日志', badge: 'errors' },
     { id: 'schedule', href: '/schedule.html', label: '采集设置' },

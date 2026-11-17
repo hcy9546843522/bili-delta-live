@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>主播池 · 三角洲行动</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/ui.css" />
+    <link rel="stylesheet" href="/pool.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-inner">
+        <div class="brand">
+          <h1><span class="brand-mark">●</span> 主播池</h1>
+          <span class="brand-sub" id="summary-sub">加载中…</span>
+        </div>
+        <nav class="tabs" id="tabs"></nav>
+        <div class="controls">
+          <button id="refresh-btn" title="重新读取数据">刷新</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <div id="unavailable" style="display: none"></div>
+
+      <!-- 总览 -->
+      <div class="stats" id="overview">
+        <div class="stat"><span class="k">池内主播</span><span class="v">—</span><span class="s">加载中</span></div>
+      </div>
+
+      <!-- 分层结构：这是本页的核心，比表格更先看到 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>活跃度分层</h2>
+            <span class="hint">按「最近一次播过」分档，各档查询频率不同</span>
+            <span class="spacer"></span>
+            <span class="hint" id="tier-hint"></span>
+          </div>
+          <div class="panel-body">
+            <div class="tier-grid" id="tier-grid"></div>
+            <div class="tier-bar" id="tier-bar" aria-hidden="true"></div>
+            <p class="note" style="margin-top: 14px">
+              分层不是给人贴标签，而是<strong>调度策略</strong>：热层每小时查一次，
+              越往下越稀疏。休眠的人重新开播时，discover 扫专区榜会立刻发现他，
+              那一场登记后 <code>last_active</code> 变新，下一轮自动回到热层 ——
+              所以降频不等于漏采。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 名单 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2 id="list-title">池内主播</h2>
+            <span class="hint" id="list-hint">全部</span>
+            <span class="spacer"></span>
+            <button id="export-btn" class="ghost" title="导出当前筛选结果为 CSV">导出 CSV</button>
+          </div>
+
+          <div class="panel-body">
+            <!-- 筛选栏 -->
+            <div class="filters">
+              <label class="field grow">
+                搜索
+                <input id="q-input" type="search" placeholder="昵称，或直接输 UID" autocomplete="off" spellcheck="false" />
+              </label>
+              <label class="field">
+                分层
+                <select id="tier-select">
+                  <option value="">全部</option>
+                  <option value="hot">热层</option>
+                  <option value="warm">温层</option>
+                  <option value="cold">冷层</option>
+                  <option value="ice">冰层</option>
+                </select>
+              </label>
+              <label class="field">
+                来源
+                <select id="mode-select">
+                  <option value="">全部</option>
+                  <option value="discover">discover</option>
+                  <option value="track">track</option>
+                  <option value="manual">manual</option>
+                  <option value="import">import</option>
+                </select>
+              </label>
+              <label class="field">
+                每页
+                <select id="page-size">
+                  <option value="50">50</option>
+                  <option value="100" selected>100</option>
+                  <option value="200">200</option>
+                  <option value="500">500</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="table-scroll">
+              <table id="pool-table">
+                <thead></thead>
+                <tbody>
+                  <tr>
+                    <td colspan="8" class="u-dim" style="text-align: center; padding: 28px">加载中…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pager" id="pager"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 口径说明 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>这几个数字怎么算的</h2>
+            <span class="hint">避免误读</span>
+          </div>
+          <div class="panel-body">
+            <p class="note">
+              <strong>上次活跃</strong>取该主播所有场次里最晚的一次「被观测到」的时刻，
+              不是他自己的最后开播时间 —— 所以它会随采集推进。
+              <strong>场次</strong>只统计库里有的场次：早于入库的历史场次会被补录，但更早的看不到。
+            </p>
+            <p class="note">
+              <strong>累计时长</strong>只算已收尾的场次，「正在播」的那一场时长还在增长，
+              混进来会让数字一直变，所以单独排除。
+            </p>
+            <p class="note warn">
+              冰层里有很多是「只在某天被扫到一次、之后再没播过」的人。
+              他们仍留在池子里（UID 终身不变），但按周查询，成本极低。
+              想让某人立刻被刷新，去出勤页按 UID 查他一次即可。
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="/nav.js"></script>
+    <script src="/pool.js"></script>
+  </body>
+</html>

@@ -382,6 +382,8 @@ crontab -e
 ```
 http://<server-ip>:7788/                 ← 直播看板
 http://<server-ip>:7788/attendance.html  ← 主播出勤
+http://<server-ip>:7788/pool.html        ← 主播池（分层结构）
+http://<server-ip>:7788/analyze.html     ← 数据分析
 http://<server-ip>:7788/schedule.html    ← 自动采集设置
 ```
 
