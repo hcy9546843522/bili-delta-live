@@ -280,6 +280,35 @@
 
 /* --------------------------------------------------------------- 说明 */
 
+/*
+ * 说明文字。discoveries/logs/schedule 各自在自己的 css 里重复了这份定义，
+ * 但 pool.html 只引 style.css + ui.css + pool.css，不引那三个 ——
+ * 所以这里必须自带一份，否则 .note 完全没有样式，正文会跟普通段落一样大。
+ */
+.note {
+  margin: 0 0 10px;
+  font-size: var(--u-fs-sm);
+  line-height: 1.75;
+  color: var(--u-text-2);
+}
+
+.note:last-child {
+  margin-bottom: 0;
+}
+
+.note strong {
+  color: var(--u-text);
+  font-weight: 600;
+}
+
+.note.warn {
+  padding: 10px 12px;
+  border-left: 2px solid var(--u-amber);
+  background: var(--u-amber-soft);
+  border-radius: 0 var(--u-r-sm) var(--u-r-sm) 0;
+  color: #f0d3a0;
+}
+
 .note code {
   padding: 1px 5px;
   border-radius: 4px;

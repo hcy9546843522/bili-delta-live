@@ -42,6 +42,8 @@
           <div class="panel-body">
             <div class="tier-grid" id="tier-grid"></div>
             <div class="tier-bar" id="tier-bar" aria-hidden="true"></div>
+            <!-- 历史不够长时这里会插入一段解释，见 pool.js 的 renderTiers -->
+            <div id="history-warn"></div>
             <p class="note" style="margin-top: 14px">
               分层不是给人贴标签，而是<strong>调度策略</strong>：热层每小时查一次，
               越往下越稀疏。休眠的人重新开播时，discover 扫专区榜会立刻发现他，

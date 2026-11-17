@@ -25,6 +25,7 @@ const state = {
   total: 0,      // 池子总人数（不受筛选影响）
   filtered: 0,   // 当前筛选下的人数
   liveNow: 0,
+  historyDays: 0, // 库内最早一场直播至今多少天，用于解释「分层堆在一层」
   tiers: { hot: 0, warm: 0, cold: 0, ice: 0 },
   tierMeta: [],
   modes: { discover: 0, track: 0, manual: 0, import: 0 },
@@ -190,7 +191,32 @@ function renderTiers() {
     )
     .join('');
 
-  $('#tier-hint').textContent = `共 ${fmtNum(state.total)} 人 · ${list.length} 层`;
+  $('#tier-hint').textContent =
+    `共 ${fmtNum(state.total)} 人 · ${list.length} 层` +
+    (state.historyDays ? ` · 库内历史 ${state.historyDays.toFixed(1)} 天` : '');
+
+  /*
+   * 「全压在一层」不是分档算错了，而是历史还不够长。
+   *
+   * 边界是 7 / 30 / 90 天：库里只有 5 天数据时，任何人都必然落在热层，
+   * 分层条就会显示成一根满格的红条。不解释的话，这看起来完全像一个 bug，
+   * 用户会以为分层功能没生效。所以只要最深的两层是空的、且历史明显不够，
+   * 就直接把原因写出来。
+   */
+  const warn = $('#history-warn');
+  if (warn) {
+    const needed = 90; // 冷层/冰层分界
+    if (state.total > 0 && !state.tiers.cold && !state.tiers.ice && state.historyDays < needed) {
+      warn.innerHTML = `<p class="note warn">
+        下面四层现在几乎全落在<strong>热层</strong>，不是分层失效：
+        分层按「距上次出现多少天」切档（7 / 30 / 90 天），
+        而库里最早的一场直播距今只有 <strong>${state.historyDays.toFixed(1)} 天</strong>，
+        还没长到能落进冷层和冰层。随着采集天数的累积，这个图会自己长出第二、三、四段。
+      </p>`;
+    } else {
+      warn.innerHTML = '';
+    }
+  }
 }
 
 function renderHead() {
@@ -348,6 +374,7 @@ async function load() {
     state.total = j.total || 0;
     state.filtered = j.filtered || 0;
     state.liveNow = j.live_now || 0;
+    state.historyDays = j.history_days || 0;
     state.tiers = j.tiers || state.tiers;
     state.tierMeta = j.tier_meta || [];
     state.modes = j.modes || state.modes;
