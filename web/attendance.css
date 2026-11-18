@@ -411,10 +411,11 @@ button.cal-cell.muted:hover {
 }
 
 .cd-item {
+  /* 两行结构：第一行整场/当天起止，第二行说明当天统计范围。
+     单行把「整场 6小时48分」和「当天 1小时41分」挤在一起，容易误读。 */
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 2px;
   padding: 5px 8px;
   border-radius: var(--radius-sm);
   font-size: 12px;
@@ -422,6 +423,13 @@ button.cal-cell.muted:hover {
 
 .cd-item:nth-child(odd) {
   background: var(--panel-2);
+}
+
+.cd-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .cd-time {
@@ -435,14 +443,26 @@ button.cal-cell.muted:hover {
   white-space: nowrap;
 }
 
-.cd-peak,
-.cd-title {
+.cd-peak {
   color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
 }
 
-/* 跨天场次：标出这一段从哪天来、到哪天去 */
-.cd-cont {
+/* 跨天场次的小徽标：提示这一场的起止跨了自然日 */
+.cd-tag {
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+/* 第二行：日历只统计当天这一段，写明 00:00 / 24:00 边界 */
+.cd-sub {
   color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .cd-live {
@@ -451,11 +471,11 @@ button.cal-cell.muted:hover {
 }
 
 .cd-title {
+  color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1 1 120px;
-  min-width: 0;
+  max-width: 100%;
 }
 
 /* ---------------------------------------------------------------- 场次表 */

@@ -470,20 +470,34 @@ function renderDayDetail(dayStr) {
           // 主播凌晨 0 点开的播——实际整场是前一天 22:58。
           const sReal = fmtParts(it.session_start);
           const eReal = fmtParts(it.session_end);
-          const from = it.continued_from_prev
-            ? `<span class="cd-cont">前一天 ${sReal.hm}</span>`
-            : s.hm;
-          const to = !it.ended
-            ? `<span class="cd-live">直播中</span>`
-            : it.continues_next
-              ? `<span class="cd-cont">次日 ${eReal.hm}</span>`
-              : e.hm;
           const cross = it.continued_from_prev || it.continues_next;
+
+          // 跨天场的整场起止必须带日期：「11-17 18:53 → 11-18 01:41」。
+          // 旧写法「前一天 18:53 → 01:41」会被读成当天 18:53→01:41（6小时48分），
+          // 跟日历只统计的 1小时41分对不上，所以拆成整场 / 当天两行。
+          const whole = it.ended
+            ? `${sReal.day} ${sReal.hm} → ${eReal.day} ${eReal.hm}`
+            : `${sReal.day} ${sReal.hm} → 直播中`;
+
+          // 当天这一段的边界：跨到前一天就从 00:00 起算，跨到次日就截到 24:00
+          const segFrom = it.continued_from_prev ? '00:00' : s.hm;
+          const segTo = !it.ended ? '现在' : it.continues_next ? '24:00' : e.hm;
+
+          const line = cross
+            ? `<span class="cd-tag">跨天场</span>
+               <span class="cd-time">${whole}</span>
+               <span class="cd-dur">${it.ended ? `整场 ${humanDuration(it.session_seconds)}` : '直播中'}</span>
+               <span class="cd-peak">峰值 ${shortNum(it.peak_online)}</span>`
+            : `<span class="cd-time">${s.hm} → ${!it.ended ? '<span class="cd-live">直播中</span>' : e.hm}</span>
+               <span class="cd-dur">共 ${humanDuration(it.seconds)}</span>
+               <span class="cd-peak">峰值 ${shortNum(it.peak_online)}</span>`;
+          const sub = cross
+            ? `<div class="cd-sub">日历只统计当天这一段：${segFrom} → ${segTo}，共 ${humanDuration(it.seconds)}</div>`
+            : '';
           return `<div class="cd-item">
-            <span class="cd-time">${from} → ${to}</span>
-            <span class="cd-dur">${cross ? '这天 ' : ''}${humanDuration(it.seconds)}</span>
-            <span class="cd-peak">峰值 ${shortNum(it.peak_online)}</span>
-            ${it.title ? `<span class="cd-title">${escapeHtml(it.title)}</span>` : ''}
+            <div class="cd-line">${line}</div>
+            ${sub}
+            ${it.title ? `<div class="cd-title">${escapeHtml(it.title)}</div>` : ''}
           </div>`;
         })
         .join('')}</div>`
