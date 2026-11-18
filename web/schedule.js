@@ -104,8 +104,10 @@ function renderStatus(st) {
 
   const t = st.track || {};
   const d = st.discover || {};
+  const r = st.radar || {};
   cards.push(card('下次 track', untilText(t)));
   cards.push(card('下次 discover', untilText(d)));
+  cards.push(card('下次 radar', r.enabled === false ? '未启用' : untilText(r)));
 
   // 上次真实执行
   const lr = t.lastRun;
@@ -191,7 +193,13 @@ function fillForm(cfg, force) {
   $('#discover-max-pages').value = cfg.discoverMaxPages;
   $('#track-batch-delay').value = cfg.trackBatchDelay;
   $('#discover-delay').value = cfg.discoverDelay;
+  // radar：老配置里可能没有这些字段，normalizeConfig 会补默认值，
+  // 但直接读 undefined 会让输入框变成空字符串，所以都兜一层。
+  $('#radar-enabled').checked = cfg.radarEnabled !== false;
+  $('#radar-minutes').value = cfg.radarMinutes ?? 5;
+  $('#radar-pages').value = cfg.radarPages ?? 2;
   updateSwitchText();
+  updateRadarSwitchText();
   updatePresetHighlight();
   updateTips(cfg);
   state.dirty = false;
@@ -204,6 +212,13 @@ function updateSwitchText() {
   $('#enabled-hint').textContent = on
     ? '到点会自动跑采集（会访问 B 站，请确认没在 crontab 里重复跑）'
     : '关闭时不会自动发起任何请求，但仍可用下方按钮手动跑一次';
+}
+
+function updateRadarSwitchText() {
+  const on = $('#radar-enabled').checked;
+  const el = $('#radar-enabled-text');
+  el.textContent = on ? '开启' : '关闭';
+  el.style.color = on ? 'var(--accent)' : 'var(--text-dim)';
 }
 
 function updatePresetHighlight() {
@@ -245,6 +260,27 @@ function updateTips(cfg) {
       : th > 6
         ? '间隔较大时，短于该时长的直播可能漏记。'
         : '只查池内已知主播，间隔影响直播时长的记录精度。';
+
+  /*
+   * radar 的间隔必须和「页数能覆盖多久」对上，否则就是自欺欺人：
+   * 实测 878 分区平均 12.3 个新开播/分钟，每页 50 个房间
+   * → 每页约覆盖 4 分钟。间隔大于「页数 × 4 分钟」就会留空窗。
+   */
+  const rm = Number($('#radar-minutes').value) || 5;
+  const rp = Number($('#radar-pages').value) || 2;
+  const coveredMin = rp * (50 / 12.3);
+  const rtip = $('#radar-tip');
+  if (!isFinite(coveredMin)) {
+    rtip.textContent = '';
+  } else if (rm > coveredMin) {
+    rtip.innerHTML =
+      `<span style="color:#ef6b6b">✗ ${rp} 页约覆盖 ${coveredMin.toFixed(0)} 分钟，` +
+      `间隔 ${rm} 分钟会留 ${(rm - coveredMin).toFixed(0)} 分钟空窗，可能漏采。</span>`;
+  } else {
+    rtip.innerHTML =
+      `<span style="color:var(--green)">✓ ${rp} 页约覆盖 ${coveredMin.toFixed(0)} 分钟，` +
+      `间隔 ${rm} 分钟无缝衔接。</span> 每天约 ${Math.round((1440 / rm) * rp)} 次榜单请求。`;
+  }
 }
 
 /** 画一个小的漂移示意，让用户直观看到 24 与 23 的差别 */
@@ -318,15 +354,17 @@ function renderProgress(p) {
   const total = Number(p.total) || 0;
   const done = Number(p.done) || 0;
   const isDiscover = p.kind === 'discover';
+  const isRadar = p.kind === 'radar';
   const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
 
   const title = PHASE_TEXT[p.phase] || p.phase || '执行中';
-  $('#progress-title').textContent = `${isDiscover ? 'discover' : 'track'} · ${title}`;
+  $('#progress-title').textContent = `${isDiscover ? 'discover' : isRadar ? 'radar' : 'track'} · ${title}`;
   // discover 的 total 只是「最多翻页数」（100），实际常在十几页就正常收尾。
   // 显示成「14 / 100 批（14%）」会让人误以为没跑完，所以改报绝对页数。
-  $('#progress-pct').textContent = isDiscover
+  // radar 同理：它是固定扫 N 页，报「已扫 k 页」比百分比直观。
+  $('#progress-pct').textContent = isDiscover || isRadar
     ? done > 0
-      ? `已翻 ${done} 页`
+      ? `已扫 ${done} 页`
       : ''
     : total > 0
       ? `${done} / ${total} 批（${pct}%）`
@@ -353,7 +391,13 @@ function renderProgress(p) {
   // discover 的 summary 里 pool/live/newSessions 恒为 0（那是 track 的字段），
   // 一并显示会让人误以为「池子空了」。
   const meta = [];
-  if (isDiscover) {
+  if (isRadar) {
+    // radar 的字段与 track 不同：扫了多少房间、其中池内多少、落了几场
+    if (p.scanned != null) meta.push(['扫到', `${p.scanned} 个房间`]);
+    if (p.known != null) meta.push(['池内', `${p.known} 人`]);
+    if (p.live != null) meta.push(['在播', `${p.live} 人`]);
+    if (p.newSessions != null) meta.push(['新场次', p.newSessions]);
+  } else if (isDiscover) {
     // 翻页数已经在右上角显示，这里只补充「发现了多少房间」
     if (p.found != null) meta.push(['已发现', `${p.found} 个房间`]);
     if (p.newStreamers != null) meta.push(['新增', `${p.newStreamers} 人`]);
@@ -464,7 +508,7 @@ function startPolling(kind) {
  */
 async function resumeProgress() {
   const finishedRuns = [];
-  for (const kind of ['track', 'discover']) {
+  for (const kind of ['track', 'discover', 'radar']) {
     try {
       const d = await getJson(`/api/schedule/progress?kind=${encodeURIComponent(kind)}`);
       if (!d.available) continue;
@@ -485,24 +529,31 @@ async function resumeProgress() {
   const { kind, lr } = finishedRuns[0];
   const s = lr.summary || {};
   const isDiscover = kind === 'discover';
+  const isRadar = kind === 'radar';
 
   renderProgress({
     kind,
     phase: lr.ok ? 'done' : s.status === 'rate-limited' ? 'rate-limited' : 'error',
-    done: isDiscover ? Number(s.requests) || 0 : 0,
+    // radar 的 summary.requests 含榜单请求 + 状态请求，当作进度分母没有意义；
+    // 用 scanned（本轮扫到的房间数）更贴近用户对「扫了多少」的理解。
+    done: isDiscover ? Number(s.requests) || 0 : isRadar ? Number(s.scanned) || 0 : 0,
     total: 0,
     newStreamers: s.newStreamers,
     pool: s.pool,
     live: s.live,
     newSessions: s.newSessions,
+    scanned: s.scanned,
+    known: s.known,
   });
   $('#progress-title').textContent =
-    `${isDiscover ? 'discover' : 'track'} · 上次执行结果 · ${fmtTime(lr.at)}`;
+    `${isDiscover ? 'discover' : isRadar ? 'radar' : 'track'} · 上次执行结果 · ${fmtTime(lr.at)}`;
   setHint(
     lr.ok
       ? isDiscover
         ? `上次 discover 完成 · 新增 ${s.newStreamers ?? '—'} 人 · ${s.requests ?? '—'} 次请求`
-        : `上次 track 完成 · 池 ${s.pool ?? '—'} 人 · 在播 ${s.live ?? '—'} 人`
+        : isRadar
+          ? `上次 radar 完成 · 扫 ${s.scanned ?? '—'} 个房间 · 池内 ${s.known ?? '—'} 人 · 新场次 ${s.newSessions ?? '—'}`
+          : `上次 track 完成 · 池 ${s.pool ?? '—'} 人 · 在播 ${s.live ?? '—'} 人`
       : `上次 ${kind} 失败：${lr.error || '未知错误'}`,
     lr.ok ? 'ok' : 'err'
   );
@@ -541,6 +592,15 @@ async function save() {
     discoverMaxPages: Number($('#discover-max-pages').value),
     trackBatchDelay: Number($('#track-batch-delay').value),
     discoverDelay: Number($('#discover-delay').value),
+    radarEnabled: $('#radar-enabled').checked,
+    radarMinutes: Number($('#radar-minutes').value),
+    radarPages: Number($('#radar-pages').value),
+    /*
+     * radarArea 页面上没有输入框（池子 99% 来自 878，改它没有意义），
+     * 但 saveConfig 会走 normalizeConfig —— 不带上它就会被默认值 878 覆盖，
+     * 用户之前在配置里设过的其他分区会静默丢失。所以原样回传。
+     */
+    radarArea: (state.status && state.status.config && state.status.config.radarArea) || 878,
   };
 
   try {
@@ -590,7 +650,8 @@ async function runNow(kind) {
   // discover 本身就是全量扫专区，没有这个必要。
   if (kind === 'track' && !window.confirm(buildTrackConfirmText())) return;
 
-  const btn = kind === 'track' ? $('#btn-run-track') : $('#btn-run-discover');
+  const btnOf = { track: '#btn-run-track', discover: '#btn-run-discover', radar: '#btn-run-radar' };
+  const btn = $(btnOf[kind] || btnOf.track);
   const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = '提交中…';
@@ -620,13 +681,18 @@ function bindEvents() {
     updateSwitchText();
   });
 
-  for (const id of ['#track-hours', '#discover-hours', '#discover-max-pages', '#track-batch-delay', '#discover-delay']) {
+  for (const id of ['#track-hours', '#discover-hours', '#discover-max-pages', '#track-batch-delay', '#discover-delay', '#radar-minutes', '#radar-pages']) {
     $(id).addEventListener('input', () => {
       state.dirty = true;
       updatePresetHighlight();
       updateTips();
     });
   }
+
+  $('#radar-enabled').addEventListener('change', () => {
+    state.dirty = true;
+    updateRadarSwitchText();
+  });
 
   for (const b of document.querySelectorAll('.chip')) {
     b.addEventListener('click', () => {
@@ -640,6 +706,7 @@ function bindEvents() {
   $('#btn-save').addEventListener('click', save);
   $('#btn-run-track').addEventListener('click', () => runNow('track'));
   $('#btn-run-discover').addEventListener('click', () => runNow('discover'));
+  $('#btn-run-radar').addEventListener('click', () => runNow('radar'));
 
   // 离开前提醒未保存
   window.addEventListener('beforeunload', (e) => {

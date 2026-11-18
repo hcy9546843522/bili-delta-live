@@ -38,6 +38,10 @@ const DEFAULTS = {
   importFile: null,
   progress: false,
   tiered: true,
+  // radar 专用：扫几页榜、每页几条、什么分区
+  radarPages: 2,
+  radarPageSize: 50,
+  radarAreaId: 878,
 };
 
 function parseArgs(argv) {
@@ -58,11 +62,14 @@ function parseArgs(argv) {
     else if (a === '--progress') opts.progress = true;
     else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--full') opts.tiered = false;
+    else if (a === '--radar-pages') opts.radarPages = Number(next());
+    else if (a === '--radar-page-size') opts.radarPageSize = Number(next());
+    else if (a === '--radar-area') opts.radarAreaId = Number(next());
     else if (a === '-h' || a === '--help') {
       console.log(`用法: node collect-track.js [选项]
 
   --db FILE        数据库路径（默认 ./data/live.sqlite）
-  --mode MODE      auto | discover | track（默认 auto）
+  --mode MODE      auto | discover | track | radar（默认 auto）
   --max-pages N    discover 时最多翻多少页（默认 100）
   --delay MS       翻页间隔毫秒（默认 2000~3500 随机）
   --batch-delay MS 批量查状态间隔毫秒（默认 1500）
@@ -70,24 +77,36 @@ function parseArgs(argv) {
   --dry-run        只统计不写库
   --full           忽略分层，全量查池中所有主播（排障/补数时用）
   --quiet          安静模式
+  --radar-pages N      radar 每轮扫几页榜（默认 2）
+  --radar-page-size N  radar 每页几条（默认 50，实测上限也是 50）
+  --radar-area N       radar 扫哪个分区（默认 878 三角洲行动）
+
+三种采集模式：
+  discover  按人气翻页扫全分区，往池子里加新人（请求多，一天一次）
+  track     按分层刷池中主播的状态，记录场次起止（每小时一次）
+  radar     按**开播时间**扫分区榜前几页，只对**池内**主播补落场次
+            （每 5 分钟一次，成本恒定 2 个请求，与池子规模无关）
 
 分层采集（默认开启）：
   热层 7 天内播过 → 每小时    温层 8~30 天  → 每 6 小时
-  冷层 31~90 天   → 每天      冰层 90 天以上 → 每周
-  池子只增不减，全量查会让请求量随规模线性膨胀；分层后长期维持低请求量。
-  休眠主播重新开播会被 discover 重新发现，自动回到热层，不会漏采。
+  冷层 31~90 天   → 每天      冰层 90 天以上 → 每天（分摊到 24 个整点）
 
-每小时定时建议：
-  0 * * * * cd /opt/bili-live && node collect-track.js --mode track --quiet
-  30 3 * * * cd /opt/bili-live && node collect-track.js --mode discover --quiet`);
+  冰层为什么不再是每周一次：7 天里只在一个漂移的瞬间扫一次，主播复播
+  恰好撞上那一刻是小概率事件，等于基本漏采。现在靠 radar 主动发现复播
+  （按开播时间排序，新开播的人必在第 1 页），track 的冰层只做兜底。
+
+定时建议：
+  */5 * * * * cd /opt/bili-live && node collect-track.js --mode radar --quiet
+  0 * * * *   cd /opt/bili-live && node collect-track.js --mode track --quiet
+  30 3 * * *  cd /opt/bili-live && node collect-track.js --mode discover --quiet`);
       process.exit(0);
     } else {
       console.error(`未知参数: ${a}`);
       process.exit(2);
     }
   }
-  if (!['auto', 'discover', 'track'].includes(opts.mode)) {
-    console.error(`--mode 只能是 auto / discover / track，收到 ${opts.mode}`);
+  if (!['auto', 'discover', 'track', 'radar'].includes(opts.mode)) {
+    console.error(`--mode 只能是 auto / discover / track / radar，收到 ${opts.mode}`);
     process.exit(2);
   }
   return opts;
@@ -124,6 +143,8 @@ async function discover(database, opts) {
   const seen = new Map();
   let page = 1;
   let stopReason = 'max-pages';
+  // 补场次阶段也可能被限流，与翻页阶段共用这个标记
+  let rateLimited = false;
   const startedAt = now();
 
   /*
@@ -215,6 +236,7 @@ async function discover(database, opts) {
 
   // 落库
   let newStreamers = 0;
+  const newUids = [];
   if (!opts.dryRun) {
     database.exec('BEGIN');
     try {
@@ -227,7 +249,10 @@ async function discover(database, opts) {
           now: startedAt,
           mode: 'discover',
         });
-        if (isNew) newStreamers++;
+        if (isNew) {
+          newStreamers++;
+          newUids.push(Number(r.uid));
+        }
       }
       database.exec('COMMIT');
     } catch (err) {
@@ -240,7 +265,75 @@ async function discover(database, opts) {
     }
   }
 
-  return { rooms: seen.size, newStreamers, pages: page, stopReason, requests: page };
+  /*
+   * 补写场次：这一步以前是缺的，直接造成了页面上的「未采集」。
+   *
+   * 为什么必须在 discover 里补，而不是等下一轮 track：
+   *   · 榜上这些人**此刻确实在播**，但我们只 upsert 了人、没落场次。
+   *   · 而「未采集」的判定是 sessions 里查不到 last_observed_at，于是他明明
+   *     刚被我们发现、正在直播，页面上却显示「未采集」，看着像采集坏了。
+   *   · 等 track 来补也不可靠：track 按分层刷，若这一小时他没到点，等轮到
+   *     他时人可能已经下播，那场直播就永久丢了。
+   *
+   * 只补「本次新增的人」而不是榜上全部 2000 人：老主播的场次由 track 维护，
+   * 重复补只会让请求量翻倍，而能修好的「未采集」一个也不会多。
+   * 实测今天 1874 个新发现全部显示未采集，正是这批人。
+   */
+  let liveSessions = 0;
+  let liveNew = 0;
+  let statusRequests = 0;
+  if (newUids.length) {
+    log(opts, `  [discover] 为 ${newUids.length} 个新主播补查状态，落场次`);
+    for (let i = 0; i < newUids.length; i += bili.BATCH_LIMIT) {
+      const chunk = newUids.slice(i, i + bili.BATCH_LIMIT);
+      const batchNo = Math.floor(i / bili.BATCH_LIMIT) + 1;
+      const totalBatch = Math.ceil(newUids.length / bili.BATCH_LIMIT);
+      let status;
+      try {
+        status = await bili.fetchStatusByUids(chunk);
+        statusRequests++;
+      } catch (err) {
+        if (err.rateLimited) {
+          // 限流立刻停：这一步是「顺手补全」，不值得为它冒风控风险。
+          // 已落库的主播不受影响，只是场次要等 track 补。
+          console.error(`[限流] discover 补场次第 ${batchNo} 批被限流，停止补全。`);
+          rateLimited = true;
+          break;
+        }
+        console.warn(`[警告] discover 补场次第 ${batchNo} 批失败：${err.message}`);
+        continue;
+      }
+      const applied = applyLiveStatus(database, chunk, status, {
+        t: now(),
+        dryRun: opts.dryRun,
+        // 昵称/头像刚落库过，不必再刷一遍
+        refreshProfile: false,
+      });
+      liveNew += applied.live;
+      liveSessions += applied.newSessions;
+      log(
+        opts,
+        `  [discover] 补场次 ${batchNo}/${totalBatch}：在播 ${liveNew}，新落场次 ${liveSessions}`
+      );
+      if (i + bili.BATCH_LIMIT < newUids.length) {
+        await bili.sleep(bili.randomBetween(opts.minDelay, opts.maxDelay));
+      }
+    }
+  }
+
+  return {
+    rooms: seen.size,
+    newStreamers,
+    pages: page,
+    stopReason,
+    // 补场次只补了新增的人，这里如实分开计数，避免和 discover 的翻页请求混淆
+    requests: page + statusRequests,
+    pageRequests: page,
+    statusRequests,
+    liveNew,
+    liveSessions,
+    rateLimited,
+  };
 }
 
 /**
@@ -492,6 +585,244 @@ async function track(database, opts) {
   };
 }
 
+/* ---------------------------------------------------------------- radar */
+
+/**
+ * 把一批「刚查过状态」的 UID 落成场次。
+ *
+ * radar 和 discover 都要做同一件事：拿到 statusMap 后，把其中**确认在播**的
+ * 人写成一场直播。抽成函数是为了让两边口径永远一致 —— 之前 discover 就是
+ * 漏了这一步，只登记了人没登记场次，导致页面上成片显示「未采集」。
+ *
+ * 三条不可动摇的约定：
+ *   1. 没返回这个 UID → 跳过。不臆测状态，更不能当成下播。
+ *   2. live_status ≠ 1 → 跳过。**绝不在这里收尾场次**，收尾只归 track 管。
+ *      否则 radar 每小时扫 12 次，任何一次榜单没覆盖到他就会误关正在播的场次。
+ *   3. live_time = 0 但有 live_status = 1（接口偶发的脏数据）→ 跳过，
+ *      否则会建出 live_time=0 的幽灵场次。
+ *
+ * @param {boolean} refreshProfile 顺手刷新昵称/头像/房间号。
+ *   radar 要开（复播的人常改过名），discover 刚 upsert 过所以不用重复。
+ */
+function applyLiveStatus(database, uids, statusMap, { t, dryRun, refreshProfile = false }) {
+  const out = { live: 0, newSessions: 0, closed: 0, skipped: 0, hitUids: [] };
+
+  if (!dryRun) database.exec('BEGIN');
+  try {
+    for (const uid of uids) {
+      const st = statusMap.get(Number(uid));
+      if (!st) {
+        out.skipped++;
+        continue;
+      }
+      if (st.live_status !== 1 || !(st.live_time > 0)) {
+        out.skipped++;
+        continue;
+      }
+
+      out.live++;
+      out.hitUids.push(uid);
+      if (dryRun) continue;
+
+      if (refreshProfile) {
+        db.upsertStreamer(database, {
+          uid,
+          uname: st.uname,
+          face: st.face,
+          roomid: st.roomid,
+          now: t,
+          // mode 传 null：不改 first_mode。它记录的是「这个人是怎么进来的」，
+          // 被 radar 刷新一次昵称不该改变这个事实。
+          mode: null,
+        });
+      }
+
+      const r = db.recordLive(database, {
+        uid,
+        liveTime: st.live_time,
+        title: st.title,
+        // 封面随场次落库：接口本来就返回，不额外发请求
+        cover: st.cover,
+        areaId: st.area_id,
+        areaName: st.area_name,
+        online: st.online,
+        now: t,
+      });
+      if (r.created) out.newSessions++;
+      out.closed += r.closed;
+    }
+    if (!dryRun) database.exec('COMMIT');
+  } catch (err) {
+    if (!dryRun) database.exec('ROLLBACK');
+    throw err;
+  }
+
+  return out;
+}
+
+/**
+ * 开播雷达：按**开播时间**扫分区榜前几页，只对**池内**主播补落场次。
+ *
+ * 为什么需要它（这是整个分层方案能不能成立的关键）：
+ *
+ * 分层的核心假设原本是「休眠主播复播时，discover 会重新发现他」。实测下来
+ * 这个闭环对冰层基本不成立，两条原因：
+ *   1. discover 按 sort_type=online（人气）排序，冰层主播人气低，排在最末尾；
+ *   2. 更致命的是 discover 的有效页数极不稳定——实测晚高峰能翻到 80 页以上，
+ *      凌晨十几页就空。低人气主播能不能被扫到，取决于当时榜单有多长。
+ *
+ * 而 getRoomList 支持 sort_type=live_time，实测**严格**按开播时间倒序
+ * （45 对相邻项、0 违反）。也就是说：任何人只要刚开播，他就必然出现在第 1 页。
+ * 这是一个「时间维度」的入口，和 discover 的「人气维度」入口互补。
+ *
+ * 两个必须知道的实测事实：
+ *   · 榜单记录里**没有 live_time 字段**，只有 online / 房间信息。所以想拿到
+ *     场次需要的 live_time，必须再调一次 get_status_info_by_uids。
+ *   · page_size 上限是 50：传 100 只会返回 20 条（参数被截断）。所以固定 50。
+ *
+ * 成本模型：每轮 = radarPages 次榜单请求 + ceil(命中人数/150) 次状态请求。
+ * 第 1 页覆盖最近约 1~3 分钟的开播，第 2 页到 5 分钟左右。默认 2 页，
+ * 每 5 分钟一轮 → 每天约 288×2=576 次榜单请求，加上少量状态请求。
+ * 对比热层 track 每小时 33 批的突发，radar 是更平缓的涓流。
+ *
+ * 只处理「确认在播」的人，**绝不因为没看到就关闭场次**：radar 只看得到榜上
+ * 前几页的人，没看到某人不代表他下播了。收尾一律交给 track，否则会误关。
+ */
+async function radar(database, opts) {
+  const pages = Math.max(1, Math.min(Number(opts.radarPages) || 2, 20));
+  const pageSize = Math.max(1, Math.min(Number(opts.radarPageSize) || 50, 50));
+  const areaId = Number(opts.radarAreaId) || 878;
+
+  // 榜上所有房间，按 uid 去重（相邻两页会有重叠，实测常见）
+  const rooms = new Map();
+  let requests = 0;
+  let stopReason = 'max-pages';
+  let rateLimited = false;
+
+  for (let page = 1; page <= pages; page++) {
+    let list;
+    try {
+      list = await bili.fetchAreaPage({ areaId, page, pageSize, sortType: 'live_time' });
+      requests++;
+    } catch (err) {
+      if (err.rateLimited) {
+        // 与 discover/track 一致：限流立刻停，不重试试探边界
+        console.error(`[限流] radar 第 ${page} 页被限流，停止。已拿到 ${rooms.size} 个房间。`);
+        rateLimited = true;
+        stopReason = 'rate-limited';
+        break;
+      }
+      console.warn(`[警告] radar 第 ${page} 页失败：${err.message}`);
+      stopReason = 'request-failed';
+      break;
+    }
+
+    if (!list.length) {
+      stopReason = 'empty-page';
+      break;
+    }
+    for (const r of list) {
+      if (r.uid > 0 && !rooms.has(r.uid)) rooms.set(r.uid, r);
+    }
+
+    emitProgress(opts, {
+      kind: 'radar',
+      phase: 'page',
+      done: page,
+      total: pages,
+      found: rooms.size,
+    });
+
+    if (page < pages) await bili.sleep(bili.randomBetween(opts.minDelay, opts.maxDelay));
+  }
+
+  const scanned = [...rooms.keys()];
+
+  // 求交：只关心池内的人。池外新人交给 discover，radar 不越界——
+  // 否则每轮都会往池子里塞几十个“路过的人”，池子会被噪声灌满。
+  const known = db.filterKnownUids(database, scanned);
+  const targets = scanned.filter((uid) => known.has(uid));
+
+  if (!targets.length) {
+    return {
+      scanned: scanned.length,
+      known: 0,
+      live: 0,
+      newSessions: 0,
+      closed: 0,
+      requests,
+      skipped: 0,
+      rateLimited,
+      stopReason,
+    };
+  }
+
+  // 补状态：榜单没有 live_time，必须再查一次才能落场次
+  let status;
+  try {
+    status = await bili.fetchStatusByUids(targets);
+    requests++;
+  } catch (err) {
+    if (err.rateLimited) {
+      console.error('[限流] radar 状态查询被限流，本轮放弃。');
+      rateLimited = true;
+    } else {
+      console.warn(`[警告] radar 状态查询失败：${err.message}`);
+    }
+    return {
+      scanned: scanned.length,
+      known: targets.length,
+      live: 0,
+      newSessions: 0,
+      closed: 0,
+      requests,
+      skipped: targets.length,
+      rateLimited,
+      stopReason: 'request-failed',
+    };
+  }
+
+  const t = now();
+  const applied = applyLiveStatus(database, targets, status, {
+    t,
+    dryRun: opts.dryRun,
+    // 复播的人很可能改过名或换过封面，顺手刷新
+    refreshProfile: true,
+  });
+  const { live, newSessions, closed, skipped } = applied;
+
+  log(
+    opts,
+    `  [radar] 扫 ${pages} 页 ${scanned.length} 个房间，池内 ${targets.length}，` +
+      `在播 ${live}，新场次 ${newSessions}`
+  );
+
+  emitProgress(opts, {
+    kind: 'radar',
+    phase: 'done',
+    done: pages,
+    total: pages,
+    scanned: scanned.length,
+    known: targets.length,
+    live,
+    newSessions,
+  });
+
+  return {
+    scanned: scanned.length,
+    known: targets.length,
+    live,
+    newSessions,
+    closed,
+    requests,
+    skipped,
+    rateLimited,
+    stopReason,
+    // 复播名单落日志：这是「冰层主播回来了」的直接证据，排查漏采时最有用
+    hitUids: applied.hitUids.slice(0, 50),
+  };
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 (async () => {
@@ -527,17 +858,42 @@ async function track(database, opts) {
       result.newStreamers += im.newStreamers;
     }
 
+    if (opts.mode === 'radar') {
+      log(opts, '▶ radar：按开播时间扫榜，为池内复播者补落场次');
+      const r = await radar(database, opts);
+      log(
+        opts,
+        `  完成：扫 ${r.scanned} 个房间，池内 ${r.known}，在播 ${r.live}，` +
+          `新场次 ${r.newSessions}，${r.requests} 次请求，停止原因 ${r.stopReason || '—'}\n`
+      );
+      result.pool = r.known;
+      result.live = r.live;
+      result.newSessions = r.newSessions;
+      result.closed = r.closed;
+      result.skipped = r.skipped;
+      result.requests += r.requests;
+      if (r.rateLimited) status = 'rate-limited';
+      // 扫了一轮但榜上前几页没有池内的人：这是完全正常的（池子只有几千人，
+      // 而全站每分钟开播几百个）。标记 idle，别让它污染趋势图。
+      else if (r.known === 0) status = 'idle';
+    }
+
     if (opts.mode === 'auto' || opts.mode === 'discover') {
       log(opts, '▶ discover：扫描分区，更新主播池');
       const d = await discover(database, opts);
       log(
         opts,
         `  完成：${d.rooms} 个房间，新增 ${d.newStreamers} 个主播，` +
-          `${d.pages} 页，停止原因 ${d.stopReason}\n`
+          `${d.pageRequests || d.pages} 页，停止原因 ${d.stopReason}` +
+          (d.statusRequests
+            ? `；补场次 ${d.statusRequests} 批，在播 ${d.liveNew}，落场次 ${d.liveSessions}`
+            : '') +
+          '\n'
       );
       result.newStreamers = d.newStreamers;
+      result.newSessions += d.liveSessions || 0;
       result.requests += d.requests;
-      if (d.stopReason === 'rate-limited') status = 'rate-limited';
+      if (d.rateLimited || d.stopReason === 'rate-limited') status = 'rate-limited';
     }
 
     if (opts.mode === 'auto' || opts.mode === 'track') {

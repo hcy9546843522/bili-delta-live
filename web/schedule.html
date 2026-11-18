@@ -70,6 +70,34 @@
               </label>
             </div>
 
+            <div class="row-note" style="margin-top: 4px">
+              <strong>开播雷达</strong>
+              <span class="hint"
+                >按开播时间扫榜，找回休眠后复播的人（分钟级，成本与池子规模无关）</span
+              >
+              <span class="spacer"></span>
+              <label class="switch">
+                <input type="checkbox" id="radar-enabled" />
+                <span class="switch-track"><span class="switch-knob"></span></span>
+                <span class="switch-text" id="radar-enabled-text">关闭</span>
+              </label>
+            </div>
+
+            <div class="form-grid">
+              <label class="form-field">
+                <span class="form-label">radar 间隔（分钟）</span>
+                <input type="number" id="radar-minutes" min="2" max="120" step="1" />
+                <span class="form-tip" id="radar-tip"></span>
+              </label>
+              <label class="form-field">
+                <span class="form-label">radar 每轮扫几页</span>
+                <input type="number" id="radar-pages" min="1" max="20" step="1" />
+                <span class="form-tip"
+                  >每页 50 个房间（接口上限）。实测 878 分区约 12 个新开播/分钟，2 页≈覆盖 8 分钟。</span
+                >
+              </label>
+            </div>
+
             <div class="preset-bar">
               <span class="hint">discover 快捷预设（都必须与 24 互质）：</span>
               <button type="button" class="chip" data-discover="23">23 小时</button>
@@ -104,6 +132,7 @@
               <button id="btn-save" class="primary">保存设置</button>
               <button id="btn-run-track">立即 track 一次</button>
               <button id="btn-run-discover">立即 discover 一次</button>
+              <button id="btn-run-radar">立即 radar 一次</button>
               <span class="spacer"></span>
               <span class="save-hint" id="save-hint"></span>
             </div>

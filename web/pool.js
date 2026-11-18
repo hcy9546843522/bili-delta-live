@@ -170,7 +170,18 @@ function renderTiers() {
       const active = state.tier === t.id ? ' active' : '';
       const range =
         t.id === 'hot' ? '7 天内' : t.id === 'ice' ? '90 天以上' : t.max_days ? `≤ ${t.max_days} 天` : '—';
-      const hours = t.every_hours >= 168 ? `每 ${t.every_hours / 24} 天` : `每 ${t.every_hours} 小时`;
+      /*
+       * 分摊层（冰层）必须把「周期」和「节律」一起说清楚。
+       *
+       * 只写「每 7 天查一次」会让看板的人以为调度坏了 —— 实际是每 7 小时
+       * 查 1/24 的人，7 天正好轮完全员。这两个说法差 24 倍，不写清楚就会被
+       * 当成配置错误。
+       *
+       * 文案要短：四张卡在同一行等高，某一层写得比别的长两行，
+       * 网格就会参差不齐。
+       */
+      const every = t.every_hours >= 168 ? `每 ${t.every_hours / 24} 天` : `每 ${t.every_hours} 小时`;
+      const hours = t.slots > 1 ? `${every}一轮 · 每 ${t.slot_hours}h 查 1/${t.slots}` : every;
       return `
       <button type="button" class="tier-card tier-${escapeHtml(t.id)}${active}" data-tier="${escapeHtml(t.id)}"
               title="点击只看这一层，再点取消">

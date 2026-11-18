@@ -654,8 +654,8 @@ const server = http.createServer((req, res) => {
     const sc = getScheduler();
     if (!sc) return sendJson(res, { available: false, error: '调度器不可用' }, 200);
     const kind = u.searchParams.get('kind') || 'track';
-    if (kind !== 'track' && kind !== 'discover') {
-      return sendJson(res, { error: 'kind 只能是 track / discover' }, 400);
+    if (kind !== 'track' && kind !== 'discover' && kind !== 'radar') {
+      return sendJson(res, { error: 'kind 只能是 track / discover / radar' }, 400);
     }
     const st = sc.status();
     return sendJson(res, {
