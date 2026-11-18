@@ -183,27 +183,97 @@
   padding-bottom: 4px;
 }
 
+/* 月历：每周一行，周一→周日自左向右。
+   第一列是行头（月份标签），其余 7 列是一周的七天。
+   两处网格的列定义必须完全一致，否则表头会和格子错位。 */
+.cal-weekdays,
 .cal-grid {
   display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(7, 13px);
-  gap: 3px;
-  width: max-content;
+  grid-template-columns: 34px repeat(7, minmax(30px, 1fr));
+  gap: 4px;
+}
+
+.cal-weekdays {
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+/* 周六日单独着色：工作日灰、周末偏亮，扫一眼就能分出周界 */
+.cal-weekdays .weekend {
+  color: var(--blue);
+}
+
+.cal-rowlabel {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 28px;
+  text-align: right;
+  padding-right: 4px;
+  white-space: nowrap;
 }
 
 .cal-cell {
-  width: 13px;
-  height: 13px;
-  border-radius: 3px;
+  /* 格子用 <button>：可点击、可键盘聚焦。这里把浏览器默认样式清掉。 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
   background: var(--panel-2);
   border: 1px solid transparent;
-  transition: transform 0.1s;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.08s, border-color 0.12s;
 }
 
-.cal-cell:hover {
-  transform: scale(1.35);
-  border-color: var(--text);
-  z-index: 2;
+button.cal-cell:hover {
+  transform: translateY(-1px);
+  border-color: var(--text-dim);
+}
+
+/* 有直播的格子：数字用正文色，对比度跟上背景 */
+.cal-cell.has {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* 周末格子：数字着蓝色，与表头呼应。
+   未开播的周末格子给一点底色差异，否则整片空白分不出周界。 */
+.cal-cell[data-dow='5'] .cal-num,
+.cal-cell[data-dow='6'] .cal-num {
+  color: var(--blue);
+}
+
+.cal-cell.lv0[data-dow='5'],
+.cal-cell.lv0[data-dow='6'] {
+  background: #202632;
+}
+
+/* 补齐用的占位格（上月末 / 下月初）：不可点、不参与统计 */
+.cal-cell.muted {
+  background: transparent;
+  color: var(--border);
+  cursor: default;
+}
+
+button.cal-cell.muted:hover {
+  transform: none;
+  border-color: transparent;
+}
+
+.cal-cell.today {
+  border-color: var(--accent);
+}
+
+.cal-cell.selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue) inset;
 }
 
 .cal-cell.lv0 {
@@ -226,9 +296,10 @@
   background: rgba(251, 114, 153, 0.9);
 }
 
-.cal-cell.future {
-  background: transparent;
-  border: 1px dashed var(--border-soft);
+/* 深色格子上数字要压暗，否则白字发糊 */
+.cal-cell.lv3 .cal-num,
+.cal-cell.lv4 .cal-num {
+  color: #2b1016;
 }
 
 .cal-legend {
@@ -240,21 +311,98 @@
   color: var(--text-faint);
 }
 
-.cal-legend .cal-cell:hover {
-  transform: none;
+.cal-legend .cal-cell {
+  width: 13px;
+  height: 13px;
+  cursor: default;
 }
 
-.cal-months {
+/* --------------------------------------------------- 选中某天后的当日详情 */
+
+.cal-detail {
+  margin-top: 12px;
+}
+
+.cal-detail:empty {
+  display: none;
+}
+
+.cd-head {
   display: flex;
-  gap: 3px;
-  font-size: 11px;
-  color: var(--text-faint);
-  margin-bottom: 5px;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
 }
 
-.cal-month-label {
+.cd-dow {
+  color: var(--text-dim);
+}
+
+.cd-sum {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.cd-sum.dim {
+  color: var(--text-faint);
+}
+
+.cd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+.cd-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.cd-item:nth-child(odd) {
+  background: var(--panel-2);
+}
+
+.cd-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
   white-space: nowrap;
+}
+
+.cd-dur {
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.cd-peak,
+.cd-title {
+  color: var(--text-faint);
+}
+
+/* 跨天场次：标出这一段从哪天来、到哪天去 */
+.cd-cont {
+  color: var(--text-faint);
+}
+
+.cd-live {
+  color: var(--green, #30a46c);
+  font-weight: 600;
+}
+
+.cd-title {
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 120px;
+  min-width: 0;
 }
 
 /* ---------------------------------------------------------------- 场次表 */

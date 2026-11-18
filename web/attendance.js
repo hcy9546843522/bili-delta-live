@@ -11,6 +11,8 @@ const state = {
   calendar: null,
   sessions: [],
   activeResult: null,
+  // 日历当前选中的日期；默认落在今天（数据窗口的最后一天）
+  selectedDay: null,
 };
 
 /* ---------------------------------------------------------------- 工具 */
@@ -66,6 +68,9 @@ function fmtDay(dayStr) {
   const [, m, d] = dayStr.split('-');
   return `${Number(m)}月${Number(d)}日`;
 }
+
+// 周一 → 周日。与网格列序一致：周一在左、周日在右。
+const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 
 function shortNum(n) {
   const v = Number(n) || 0;
@@ -233,50 +238,76 @@ function renderCalendar() {
     return 1;
   };
 
-  // 网格按周排布：每列一周，行 = 周一..周日
-  // 先算出首日的星期偏移，用空白格补齐
+  // 网格按周排布：**每行一周，周一→周日自左向右**。
+  //
+  // 早先是「每列一周、纵排 7 行」的 GitHub 风格，于是 17 号的正下方就是
+  // 18 号，日期沿竖直方向推进，读起来与日常日历相反。现在改成常规月历，
+  // 日期自左向右、逐周往下。
   const first = days[0].day;
-  const firstDow = (new Date(`${first}T00:00:00+08:00`).getDay() + 6) % 7; // 周一=0
-
-  let cells = '';
-  for (let i = 0; i < firstDow; i++) {
-    cells += '<div class="cal-cell future" style="visibility:hidden"></div>';
-  }
-
   const todayKey = days[days.length - 1].day;
 
-  for (const d of days) {
-    const lv = levelOf(d.seconds);
-    const tip = d.seconds
-      ? `${fmtDay(d.day)} · 直播 ${humanDuration(d.seconds)}（${d.sessions} 场，峰值 ${shortNum(d.peak_online)}）`
-      : `${fmtDay(d.day)} · 未开播`;
-    cells += `<div class="cal-cell lv${lv}" data-day="${d.day}" title="${escapeHtml(tip)}"></div>`;
+  // 选中日期默认落在今天；换主播或换时间窗后，若旧选择已不在窗口内，
+  // 同样回落到今天，避免详情区停在一个看不见的日期上。
+  if (!state.selectedDay || !days.some((d) => d.day === state.selectedDay)) {
+    state.selectedDay = todayKey;
   }
 
-  // 月份标签：找出每月第一天所在的列
-  const monthLabels = [];
-  let lastMonth = null;
-  days.forEach((d, i) => {
-    const month = d.day.slice(0, 7);
-    if (month !== lastMonth) {
-      const col = Math.floor((firstDow + i) / 7);
-      monthLabels.push({ col, label: `${Number(month.slice(5, 7))}月` });
-      lastMonth = month;
-    }
-  });
+  const lead = dowIndex(first); // 周一=0
 
-  const monthBar = monthLabels
-    .map((m) => `<span class="cal-month-label" style="margin-left:${m.col * 16}px">${m.label}</span>`)
-    .join('');
+  // 补齐成完整的周：首行前面填上个月末尾，末行补到周日。
+  // muted 格子只占位，不参与点击和统计。
+  const cells = [];
+  for (let i = lead; i > 0; i--) cells.push({ day: shiftDay(first, -i), muted: true });
+  for (const d of days) cells.push({ day: d.day, data: d });
+  for (let i = 1; cells.length % 7; i++) cells.push({ day: shiftDay(todayKey, i), muted: true });
+
+  const weekHead = `<div class="cal-weekdays">
+      <span class="cal-rowlabel"></span>
+      ${WEEK_LABELS.map((w, i) => `<span class="${i >= 5 ? 'weekend' : ''}">${w}</span>`).join('')}
+    </div>`;
+
+  let grid = '';
+  let shownMonth = null;
+  for (let i = 0; i < cells.length; i += 7) {
+    const row = cells.slice(i, i + 7);
+    // 行头月份：只在换月那一行写，否则每行都重复「10月」
+    const month = Number((row.find((c) => !c.muted) || row[0]).day.slice(5, 7));
+    let label = '';
+    if (month !== shownMonth) {
+      label = `${month}月`;
+      shownMonth = month;
+    }
+    grid += `<span class="cal-rowlabel">${label}</span>`;
+
+    for (const c of row) {
+      const num = Number(c.day.slice(8));
+      if (c.muted) {
+        grid += `<span class="cal-cell muted"><span class="cal-num">${num}</span></span>`;
+        continue;
+      }
+      const d = c.data;
+      const dow = dowIndex(d.day);
+      const cls = ['cal-cell', `lv${levelOf(d.seconds)}`];
+      if (d.seconds) cls.push('has');
+      if (d.day === todayKey) cls.push('today');
+      if (d.day === state.selectedDay) cls.push('selected');
+      const tip = d.seconds
+        ? `${fmtDay(d.day)} 周${WEEK_LABELS[dow]} · ${d.sessions} 场 · 共 ${humanDuration(d.seconds)}`
+        : `${fmtDay(d.day)} 周${WEEK_LABELS[dow]} · 未开播`;
+      grid += `<button type="button" class="${cls.join(' ')}" data-day="${d.day}" data-dow="${dow}" title="${escapeHtml(tip)}">
+        <span class="cal-num">${num}</span>
+      </button>`;
+    }
+  }
 
   const legend = `
     <div class="cal-legend">
       <span>少</span>
-      <div class="cal-cell lv0"></div>
-      <div class="cal-cell lv1"></div>
-      <div class="cal-cell lv2"></div>
-      <div class="cal-cell lv3"></div>
-      <div class="cal-cell lv4"></div>
+      <span class="cal-cell lv0"></span>
+      <span class="cal-cell lv1"></span>
+      <span class="cal-cell lv2"></span>
+      <span class="cal-cell lv3"></span>
+      <span class="cal-cell lv4"></span>
       <span>多</span>
       <span style="margin-left:14px">${
         realMax > 0 ? `最长一天 ${humanDuration(realMax)}` : '暂无直播记录'
@@ -285,11 +316,102 @@ function renderCalendar() {
     </div>`;
 
   $('#calendar').innerHTML = `
-    <div style="min-width:max-content">
-      <div class="cal-months">${monthBar}</div>
-      <div class="cal-grid">${cells}</div>
-      ${legend}
+    <div class="cal">${weekHead}<div class="cal-grid">${grid}</div></div>
+    <div id="cal-detail" class="cal-detail"></div>
+    ${legend}`;
+
+  renderDayDetail(state.selectedDay);
+}
+
+/** 某天是周几，周一=0。用 UTC 计算，避免受浏览器本地时区影响。 */
+function dowIndex(dayStr) {
+  const [y, m, d] = dayStr.split('-').map(Number);
+  return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+}
+
+/** 日期字符串（YYYY-MM-DD）加减天数，同样走 UTC，不涉及时区换算。 */
+function shiftDay(dayStr, delta) {
+  const [y, m, d] = dayStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d) + delta * 86400000);
+  return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+}
+
+/** 时间戳 → 东八区的「11-17」与「21:03」两个片段 */
+function fmtParts(epochSec) {
+  const dt = new Date((Number(epochSec) + 8 * 3600) * 1000);
+  return {
+    day: `${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`,
+    hm: `${pad(dt.getUTCHours())}:${pad(dt.getUTCMinutes())}`,
+  };
+}
+
+/**
+ * 选中某天，显示当天每一场的起止与时长。
+ *
+ * 数据来自 /api/attendance/streamer/:uid 的 days[].detail —— 后端已随日历
+ * 一起下发，所以点格子**不发任何请求**。
+ */
+function renderDayDetail(dayStr) {
+  const box = document.querySelector('#cal-detail');
+  if (!box) return;
+  const day = (state.calendar.days || []).find((d) => d.day === dayStr);
+  if (!day) {
+    box.innerHTML = '';
+    return;
+  }
+
+  const dow = dowIndex(dayStr);
+  const items = (day.detail || []).slice().sort((a, b) => a.start - b.start);
+
+  const head = `<div class="cd-head">
+      <strong>${fmtDay(dayStr)}</strong>
+      <span class="cd-dow">周${WEEK_LABELS[dow]}</span>
+      ${
+        day.seconds
+          ? `<span class="cd-sum">${day.sessions} 场 · 合计 ${humanDuration(day.seconds)} · 峰值 ${shortNum(day.peak_online)}</span>`
+          : `<span class="cd-sum dim">这天没有开播</span>`
+      }
     </div>`;
+
+  const list = items.length
+    ? `<div class="cd-list">${items
+        .map((it) => {
+          const s = fmtParts(it.start);
+          const e = fmtParts(it.end);
+          // 整场的真实开播/结束时刻：跨天段必须用它，不能用当天这一段的起点。
+          // 这一段是 00:00 开始的，若照搬就会写成「前一天 00:00」，让人误以为
+          // 主播凌晨 0 点开的播——实际整场是前一天 22:58。
+          const sReal = fmtParts(it.session_start);
+          const eReal = fmtParts(it.session_end);
+          const from = it.continued_from_prev
+            ? `<span class="cd-cont">前一天 ${sReal.hm}</span>`
+            : s.hm;
+          const to = !it.ended
+            ? `<span class="cd-live">直播中</span>`
+            : it.continues_next
+              ? `<span class="cd-cont">次日 ${eReal.hm}</span>`
+              : e.hm;
+          const cross = it.continued_from_prev || it.continues_next;
+          return `<div class="cd-item">
+            <span class="cd-time">${from} → ${to}</span>
+            <span class="cd-dur">${cross ? '这天 ' : ''}${humanDuration(it.seconds)}</span>
+            <span class="cd-peak">峰值 ${shortNum(it.peak_online)}</span>
+            ${it.title ? `<span class="cd-title">${escapeHtml(it.title)}</span>` : ''}
+          </div>`;
+        })
+        .join('')}</div>`
+    : '';
+
+  box.innerHTML = head + list;
+}
+
+/** 点日历格子：切换选中并更新详情 */
+function selectDay(dayStr) {
+  state.selectedDay = dayStr;
+  for (const el of document.querySelectorAll('#calendar .cal-cell[data-day]')) {
+    el.classList.toggle('selected', el.dataset.day === dayStr);
+  }
+  renderDayDetail(dayStr);
 }
 
 /* ---------------------------------------------------------------- 场次表 */
@@ -540,6 +662,12 @@ $('#add-input').addEventListener('keydown', (e) => {
 $('#window-days').addEventListener('change', (e) => {
   state.days = Number(e.target.value);
   loadDetail();
+});
+
+// 日历格子是每次重绘生成的，所以用委托绑在容器上，而不是逐个加监听。
+$('#calendar').addEventListener('click', (e) => {
+  const cell = e.target.closest('.cal-cell[data-day]');
+  if (cell) selectDay(cell.dataset.day);
 });
 
 $('#btn-export-sessions').addEventListener('click', exportSessions);
