@@ -183,19 +183,79 @@
   padding-bottom: 4px;
 }
 
-/* 月历：每周一行，周一→周日自左向右。
-   第一列是行头（月份标签），其余 7 列是一周的七天。
-   两处网格的列定义必须完全一致，否则表头会和格子错位。 */
+/* ---------------------------------------------------- 月份翻页控件 */
+
+.cal-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+/* .spacer 在 style.css 里只对 .panel-head 生效，这里要自己声明一次 */
+.cal-nav .spacer {
+  flex: 1 1 auto;
+}
+
+.cal-nav-btn {
+  /* 翻页箭头：比普通按钮窄，两个箭头夹住月份标题 */
+  padding: 2px 9px;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.cal-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.cal-nav-btn:disabled:hover {
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
+.cal-month {
+  font-size: 14px;
+  color: var(--text);
+  min-width: 84px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-today-btn {
+  padding: 3px 9px;
+  font-size: 11px;
+}
+
+.cal-nav-sum {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-nav-sum .dim {
+  color: var(--text-faint);
+}
+
+/* 月历：每周一行，周一→周日自左向右。一次只显示一个月，靠上方翻页切换。
+   两处网格的列定义必须完全一致，否则表头会和格子错位。
+
+   列宽写成固定 px，不用 1fr：1fr 会把每格撑到容器宽度（实测 64px），
+   格子变成扁长方形，整块日历又宽又大。
+
+   单月最多 6 行，格子给 20px 高就够看清两位数日期；6 行合计约 140px，
+   整块日历不会超过一屏的三分之一（之前 120 天一次排开要 19 行、449px 高）。 */
 .cal-weekdays,
 .cal-grid {
   display: grid;
-  grid-template-columns: 34px repeat(7, minmax(30px, 1fr));
-  gap: 4px;
+  grid-template-columns: repeat(7, 24px);
+  gap: 3px;
 }
 
 .cal-weekdays {
-  margin-bottom: 6px;
-  font-size: 11px;
+  margin-bottom: 4px;
+  font-size: 10px;
+  line-height: 12px;
   color: var(--text-faint);
   text-align: center;
 }
@@ -205,29 +265,22 @@
   color: var(--blue);
 }
 
-.cal-rowlabel {
-  font-size: 11px;
-  color: var(--text-faint);
-  line-height: 28px;
-  text-align: right;
-  padding-right: 4px;
-  white-space: nowrap;
-}
-
 .cal-cell {
   /* 格子用 <button>：可点击、可键盘聚焦。这里把浏览器默认样式清掉。 */
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 28px;
+  width: 24px;
+  height: 20px;
   padding: 0;
   font: inherit;
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
   background: var(--panel-2);
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
   transition: transform 0.08s, border-color 0.12s;
 }

@@ -13,6 +13,8 @@ const state = {
   activeResult: null,
   // 日历当前选中的日期；默认落在今天（数据窗口的最后一天）
   selectedDay: null,
+  // 日历当前显示的月份（'YYYY-MM'）。一次只显示一个月，靠翻页切换。
+  calMonth: null,
 };
 
 /* ---------------------------------------------------------------- 工具 */
@@ -224,7 +226,9 @@ function renderCalendar() {
     return;
   }
 
-  // 分档：按当天时长相对最大值取 4 档，避免个别超长直播压平其余
+  // 分档：按当天时长相对最大值取 4 档，避免个别超长直播压平其余。
+  // 用整个窗口的最大值而不是「当月的最大值」，否则翻到某个月时
+  // 同一段时长会因为分母变了而换颜色，跨月没法对比。
   // realMax 单独保留：maxSec 的兜底值 1 只用于避免除零，
   // 但图例要说人话——一个没有任何记录的主播不该显示「最长一天 1秒」。
   const realMax = Math.max(0, ...days.map((d) => d.seconds));
@@ -238,66 +242,92 @@ function renderCalendar() {
     return 1;
   };
 
-  // 网格按周排布：**每行一周，周一→周日自左向右**。
-  //
-  // 早先是「每列一周、纵排 7 行」的 GitHub 风格，于是 17 号的正下方就是
-  // 18 号，日期沿竖直方向推进，读起来与日常日历相反。现在改成常规月历，
-  // 日期自左向右、逐周往下。
-  const first = days[0].day;
+  const byDay = new Map(days.map((d) => [d.day, d]));
   const todayKey = days[days.length - 1].day;
+  const firstDay = days[0].day;
 
-  // 选中日期默认落在今天；换主播或换时间窗后，若旧选择已不在窗口内，
-  // 同样回落到今天，避免详情区停在一个看不见的日期上。
-  if (!state.selectedDay || !days.some((d) => d.day === state.selectedDay)) {
-    state.selectedDay = todayKey;
+  // 可翻阅的月份：从窗口第一天所在月到本月。窗口之外的月份没有数据，
+  // 翻过去只会是满屏空格，所以不让翻。
+  const months = [];
+  for (let m = monthOf(firstDay); m <= monthOf(todayKey); m = nextMonth(m)) months.push(m);
+  // 存进 state：翻页事件靠它算上一页/下一页
+  state.calMonths = months;
+
+  // 当前显示的月份：默认本月；换主播或换时间窗后若已不在范围内，回落到本月。
+  if (!state.calMonth || !months.includes(state.calMonth)) {
+    state.calMonth = monthOf(todayKey);
   }
 
-  const lead = dowIndex(first); // 周一=0
+  // 选中日期必须落在当前月份里，否则详情区会停在一个看不见的日期上。
+  if (!state.selectedDay || monthOf(state.selectedDay) !== state.calMonth) {
+    state.selectedDay = lastActiveDayIn(byDay, state.calMonth) || null;
+  }
 
-  // 补齐成完整的周：首行前面填上个月末尾，末行补到周日。
-  // muted 格子只占位，不参与点击和统计。
+  const idx = months.indexOf(state.calMonth);
+  // 注意：这里不能叫 nextMonth —— 会遮蔽上面的 nextMonth() 函数，
+  // 而 months 的生成循环就在本函数里调用它（const 的 TDZ 会直接抛错）。
+  const prevKey = idx > 0 ? months[idx - 1] : null;
+  const nextKey = idx < months.length - 1 ? months[idx + 1] : null;
+
+  const nav = `<div class="cal-nav">
+      <button type="button" class="cal-nav-btn" data-cal-nav="prev" ${
+        prevKey ? '' : 'disabled'
+      } title="${prevKey ? `${monthLabel(prevKey)}` : '已是最早一月'}">‹</button>
+      <strong class="cal-month">${monthLabel(state.calMonth)}</strong>
+      <button type="button" class="cal-nav-btn" data-cal-nav="next" ${
+        nextKey ? '' : 'disabled'
+      } title="${nextKey ? `${monthLabel(nextKey)}` : '已是最新一月'}">›</button>
+      ${
+        state.calMonth === monthOf(todayKey)
+          ? ''
+          : '<button type="button" class="cal-today-btn" data-cal-nav="today">回到本月</button>'
+      }
+      <span class="spacer"></span>
+      <span class="cal-nav-sum">${monthSummary(state.calMonth, byDay)}</span>
+    </div>`;
+
+  // 该月的格子：1 号到月末。窗口内的天用真实数据（可能在窗口外→占位），
+  // 前后用占位格补齐成完整的周。
   const cells = [];
-  for (let i = lead; i > 0; i--) cells.push({ day: shiftDay(first, -i), muted: true });
-  for (const d of days) cells.push({ day: d.day, data: d });
-  for (let i = 1; cells.length % 7; i++) cells.push({ day: shiftDay(todayKey, i), muted: true });
+  const lead = dowIndex(`${state.calMonth}-01`);
+  for (let i = lead; i > 0; i--) cells.push({ day: shiftDay(`${state.calMonth}-01`, -i), muted: true });
+
+  const lastDate = Number(daysInMonth(state.calMonth));
+  for (let d = 1; d <= lastDate; d++) {
+    const key = `${state.calMonth}-${pad(d)}`;
+    const rec = byDay.get(key);
+    // 数据窗口之外的日子（窗口从 firstDay 开始到 todayKey 结束）只是占位：
+    // 既没有观测，也不该让人误以为「这天没播」。
+    if (!rec) cells.push({ day: key, muted: true, outside: true });
+    else cells.push({ day: key, data: rec });
+  }
+  for (let i = 1; cells.length % 7; i++) {
+    cells.push({ day: shiftDay(`${state.calMonth}-${lastDate}`, i), muted: true });
+  }
 
   const weekHead = `<div class="cal-weekdays">
-      <span class="cal-rowlabel"></span>
       ${WEEK_LABELS.map((w, i) => `<span class="${i >= 5 ? 'weekend' : ''}">${w}</span>`).join('')}
     </div>`;
 
   let grid = '';
-  let shownMonth = null;
-  for (let i = 0; i < cells.length; i += 7) {
-    const row = cells.slice(i, i + 7);
-    // 行头月份：只在换月那一行写，否则每行都重复「10月」
-    const month = Number((row.find((c) => !c.muted) || row[0]).day.slice(5, 7));
-    let label = '';
-    if (month !== shownMonth) {
-      label = `${month}月`;
-      shownMonth = month;
+  for (const c of cells) {
+    const num = Number(c.day.slice(8));
+    if (c.muted) {
+      grid += `<span class="cal-cell muted"><span class="cal-num">${num}</span></span>`;
+      continue;
     }
-    grid += `<span class="cal-rowlabel">${label}</span>`;
-
-    for (const c of row) {
-      const num = Number(c.day.slice(8));
-      if (c.muted) {
-        grid += `<span class="cal-cell muted"><span class="cal-num">${num}</span></span>`;
-        continue;
-      }
-      const d = c.data;
-      const dow = dowIndex(d.day);
-      const cls = ['cal-cell', `lv${levelOf(d.seconds)}`];
-      if (d.seconds) cls.push('has');
-      if (d.day === todayKey) cls.push('today');
-      if (d.day === state.selectedDay) cls.push('selected');
-      const tip = d.seconds
-        ? `${fmtDay(d.day)} 周${WEEK_LABELS[dow]} · ${d.sessions} 场 · 共 ${humanDuration(d.seconds)}`
-        : `${fmtDay(d.day)} 周${WEEK_LABELS[dow]} · 未开播`;
-      grid += `<button type="button" class="${cls.join(' ')}" data-day="${d.day}" data-dow="${dow}" title="${escapeHtml(tip)}">
+    const d = c.data;
+    const dow = dowIndex(d.day);
+    const cls = ['cal-cell', `lv${levelOf(d.seconds)}`];
+    if (d.seconds) cls.push('has');
+    if (d.day === todayKey) cls.push('today');
+    if (d.day === state.selectedDay) cls.push('selected');
+    const tip = d.seconds
+      ? `${fmtDay(d.day)} 周${WEEK_LABELS[dow]} · ${d.sessions} 场 · 共 ${humanDuration(d.seconds)}`
+      : `${fmtDay(d.day)} 周${WEEK_LABELS[dow]} · 未开播`;
+    grid += `<button type="button" class="${cls.join(' ')}" data-day="${d.day}" data-dow="${dow}" title="${escapeHtml(tip)}">
         <span class="cal-num">${num}</span>
       </button>`;
-    }
   }
 
   const legend = `
@@ -312,15 +342,72 @@ function renderCalendar() {
       <span style="margin-left:14px">${
         realMax > 0 ? `最长一天 ${humanDuration(realMax)}` : '暂无直播记录'
       }</span>
-      <span style="margin-left:14px">今天 ${fmtDay(todayKey)}</span>
     </div>`;
 
   $('#calendar').innerHTML = `
-    <div class="cal">${weekHead}<div class="cal-grid">${grid}</div></div>
+    ${nav}
+    <div class="cal"><div class="cal-grid">${weekHead}${grid}</div></div>
     <div id="cal-detail" class="cal-detail"></div>
     ${legend}`;
 
   renderDayDetail(state.selectedDay);
+}
+
+/* ---------------------------------------------------- 月份相关的小工具 */
+
+/** 'YYYY-MM-DD' → 'YYYY-MM' */
+function monthOf(dayStr) {
+  return String(dayStr).slice(0, 7);
+}
+
+/** 'YYYY-MM' → 下一个月，跨年时进位 */
+function nextMonth(monthStr) {
+  const [y, m] = monthStr.split('-').map(Number);
+  return m === 12 ? `${y + 1}-01` : `${y}-${pad(m + 1)}`;
+}
+
+/** 'YYYY-MM' → '2026年11月' */
+function monthLabel(monthStr) {
+  const [y, m] = monthStr.split('-').map(Number);
+  return `${y}年${m}月`;
+}
+
+/** 该月有多少天。用「下月 0 号」拿，闰年由 Date 自己处理。 */
+function daysInMonth(monthStr) {
+  const [y, m] = monthStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+/** 该月里最后一个有直播的天，用作翻页后的默认选中 */
+function lastActiveDayIn(byDay, monthStr) {
+  let last = null;
+  for (const [day, rec] of byDay) {
+    if (monthOf(day) === monthStr && rec.seconds > 0 && (!last || day > last)) last = day;
+  }
+  return last;
+}
+
+/** 该月的汇总，写在翻页控件右侧 */
+function monthSummary(monthStr, byDay) {
+  let sec = 0;
+  let count = 0;
+  let peak = 0;
+  let active = 0;
+  for (const [day, rec] of byDay) {
+    if (monthOf(day) !== monthStr) continue;
+    sec += rec.seconds;
+    count += rec.sessions;
+    peak = Math.max(peak, rec.peak_online || 0);
+    if (rec.seconds > 0) active++;
+  }
+  if (!sec) return '<span class="dim">本月没有直播</span>';
+  return `${active} 天 · ${count} 场 · 合计 ${humanDuration(sec)} · 峰值 ${shortNum(peak)}`;
+}
+
+/** 翻到某个月 */
+function gotoMonth(monthStr) {
+  state.calMonth = monthStr;
+  renderCalendar();
 }
 
 /** 某天是周几，周一=0。用 UTC 计算，避免受浏览器本地时区影响。 */
@@ -666,6 +753,16 @@ $('#window-days').addEventListener('change', (e) => {
 
 // 日历格子是每次重绘生成的，所以用委托绑在容器上，而不是逐个加监听。
 $('#calendar').addEventListener('click', (e) => {
+  // 翻页按钮优先判断：它和格子是不同元素，但都在 #calendar 里
+  const nav = e.target.closest('[data-cal-nav]');
+  if (nav) {
+    const months = state.calMonths || [];
+    const cur = months.indexOf(state.calMonth);
+    if (nav.dataset.calNav === 'prev' && cur > 0) gotoMonth(months[cur - 1]);
+    else if (nav.dataset.calNav === 'next' && cur < months.length - 1) gotoMonth(months[cur + 1]);
+    else if (nav.dataset.calNav === 'today') gotoMonth(monthOf(state.calendar.days[state.calendar.days.length - 1].day));
+    return;
+  }
   const cell = e.target.closest('.cal-cell[data-day]');
   if (cell) selectDay(cell.dataset.day);
 });
