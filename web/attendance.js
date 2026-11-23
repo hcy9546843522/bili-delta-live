@@ -744,8 +744,15 @@ function renderTrend() {
     ? active.reduce((s, r) => s + timeAxisPos(r.stat.lastEnd, cutHour), 0) / active.length
     : null;
   let latest = null;
+  let latestPos = -Infinity;
   for (const r of active) {
-    if (!latest || r.stat.lastEnd > latest.stat.lastEnd) latest = r;
+    // 比的是「在直播日时间轴上有多晚」，不是绝对时间。否则最近的 00:56
+    // 会盖过更早那天的 02:07，可用户问的是每天最晚下播到几点。
+    const pos = timeAxisPos(r.stat.lastEnd, cutHour, r.day);
+    if (pos > latestPos) {
+      latestPos = pos;
+      latest = r;
+    }
   }
 
   const step = n <= 7 ? 1 : n <= 30 ? 5 : 15;
