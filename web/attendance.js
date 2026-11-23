@@ -601,20 +601,31 @@ function timeAxisPos(epochSec, cutHour, dayStr) {
   return (Number(epochSec) - dayStartEpoch(day) - cutHour * 3600) / 3600;
 }
 
-/** 时间轴位置 → 时钟文字，跨过午夜标「次日」 */
+/** 时间轴位置 → 时钟文字（只到 HH:MM，不写「次日」） */
 function posClock(pos, cutHour) {
   const total = Math.round((cutHour + pos) * 60);
-  const day = Math.floor(total / 1440);
   const h = Math.floor((total % 1440) / 60);
   const m = total % 60;
-  return `${day ? '次日 ' : ''}${pad(h)}:${pad(m)}`;
+  return `${pad(h)}:${pad(m)}`;
 }
 
-/** 某时刻的时钟文字；不在直播日当天就标「次日」 */
-function clockInDay(epochSec, dayStr) {
-  const p = fmtParts(epochSec);
-  return `${p.day === dayStr.slice(5) ? '' : '次日 '}${p.hm}`;
+/** 时间轴位置是否已经越过午夜（切分点起算 ≥ 24:00） */
+function posCrossesMidnight(pos, cutHour) {
+  return Math.round((cutHour + pos) * 60) >= 1440;
 }
+
+/** 某时刻的时钟文字（只到 HH:MM） */
+function clockInDay(epochSec) {
+  return fmtParts(epochSec).hm;
+}
+
+/** 某时刻是否已跨到直播日的下一天 */
+function isNextDay(epochSec, dayStr) {
+  return fmtParts(epochSec).day !== dayStr.slice(5);
+}
+
+/** 跨日标记：用 +1 小徽标代替「次日」两个字，时刻列才能对齐 */
+const CROSS_MARK = '<span class="tl-cross" title="跨日（+1 天）">+1</span>';
 
 /** 单根柱子：height 按 value/max 的百分比给，0 值给 zero 样式。
  *  label 是柱顶的精确小时数（1 位小数），空字符串则不显示。 */
@@ -643,7 +654,9 @@ function timelineHtml(rows, cutHour) {
       <div class="tl-track tl-track-axis">${ticks
         .map(
           (h) =>
-            `<span style="left:${(h / 24) * 100}%">${posClock(h, cutHour)}</span>`
+            `<span style="left:${(h / 24) * 100}%">${posClock(h, cutHour)}${
+              h === 24 ? CROSS_MARK : ''
+            }</span>`
         )
         .join('')}</div>
       <span class="tl-times"></span>
@@ -658,12 +671,14 @@ function timelineHtml(rows, cutHour) {
       const left = (Math.min(24, Math.max(0, sp)) / 24) * 100;
       const right = (Math.min(24, Math.max(0, ep)) / 24) * 100;
       const width = Math.max(0.6, right - left);
-      const endText = clockInDay(st.lastEnd, r.day);
-      const tip = `${fmtDay(r.day)} · ${posClock(sp, cutHour)} → ${endText} · ${st.sessions} 场 · 共 ${humanDuration(st.seconds)}`;
+      const endText = clockInDay(st.lastEnd);
+      const cross = posCrossesMidnight(sp, cutHour) || isNextDay(st.lastEnd, r.day);
+      const mark = cross ? CROSS_MARK : '';
+      const tip = `${fmtDay(r.day)} · ${posClock(sp, cutHour)} → ${endText}${cross ? '（+1）' : ''} · ${st.sessions} 场 · 共 ${humanDuration(st.seconds)}`;
       return `<div class="tl-row" title="${escapeHtml(tip)}">
         <span class="tl-day">${r.day.slice(5)} 周${WEEK_LABELS[dowIndex(r.day)]}</span>
-        <div class="tl-track"><span class="tl-bar" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></span></div>
-        <span class="tl-times">${posClock(sp, cutHour)} → ${endText}</span>
+        <div class="tl-track"><span class="tl-bar${cross ? ' cross' : ''}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></span></div>
+        <span class="tl-times">${posClock(sp, cutHour)} → ${endText}${mark}</span>
         <span class="tl-dur">${humanDuration(st.seconds)}</span>
       </div>`;
     })
@@ -699,10 +714,10 @@ function renderTrend() {
   const totalSec = active.reduce((s, r) => s + r.stat.seconds, 0);
   const maxSec = Math.max(0, ...active.map((r) => r.stat.seconds));
   const avgStartPos = active.length
-    ? active.reduce((s, r) => s + timeAxisPos(r.stat.firstStart, cutHour), 0) / active.length
+    ? active.reduce((s, r) => s + timeAxisPos(r.stat.firstStart, cutHour, r.day), 0) / active.length
     : null;
   const avgEndPos = active.length
-    ? active.reduce((s, r) => s + timeAxisPos(r.stat.lastEnd, cutHour), 0) / active.length
+    ? active.reduce((s, r) => s + timeAxisPos(r.stat.lastEnd, cutHour, r.day), 0) / active.length
     : null;
   let latest = null;
   let latestPos = -Infinity;
@@ -740,8 +755,11 @@ function renderTrend() {
     .join('');
 
   const windowNote = state.trendDays > all.length ? `（数据窗口仅 ${all.length} 天）` : '';
+  const avgStartCross = active.length && posCrossesMidnight(avgStartPos, cutHour);
+  const avgEndCross = active.length && posCrossesMidnight(avgEndPos, cutHour);
+  const latestCross = active.length && isNextDay(latest.stat.lastEnd, latest.day);
   const timeNote = active.length
-    ? `平均开播 ${posClock(avgStartPos, cutHour)} · 平均下播 ${posClock(avgEndPos, cutHour)} · 最晚下播 ${clockInDay(latest.stat.lastEnd, latest.day)}（${latest.day.slice(5)}）`
+    ? `平均开播 ${posClock(avgStartPos, cutHour)}${avgStartCross ? CROSS_MARK : ''} · 平均下播 ${posClock(avgEndPos, cutHour)}${avgEndCross ? CROSS_MARK : ''} · 最晚下播 ${clockInDay(latest.stat.lastEnd)}${latestCross ? CROSS_MARK : ''}（${latest.day.slice(5)}）`
     : '这段时间没有直播';
 
   box.innerHTML = `

@@ -782,3 +782,31 @@ button.cal-cell.muted:hover {
   color: var(--accent);
   white-space: nowrap;
 }
+
+/* 跨日标记：+1 小徽标，代替「次日」保持时刻列对齐 */
+.tl-cross {
+  display: inline-block;
+  margin-left: 3px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 12px;
+  vertical-align: 1px;
+}
+
+/* 跨日时段条的右端亮点：提示这条直播延续到了第二天 */
+.tl-bar.cross::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
