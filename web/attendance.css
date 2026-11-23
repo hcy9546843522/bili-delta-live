@@ -646,3 +646,76 @@ button.cal-cell.muted:hover {
   text-align: center;
   white-space: nowrap;
 }
+
+/* 时刻折线图：开播/下播各一条线，点高即时刻 */
+.trend-legend {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 2px 0 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.trend-legend .lg.start {
+  color: var(--blue);
+}
+
+.trend-legend .lg.end {
+  color: var(--accent);
+}
+
+.trend-legend .lg-note {
+  margin-left: 8px;
+  color: var(--text-faint);
+}
+
+.ts-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.ts-grid {
+  stroke: var(--border-soft);
+  stroke-width: 1;
+}
+
+.ts-axis {
+  fill: var(--text-faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ts-line {
+  fill: none;
+  stroke-width: 1.2;
+  opacity: 0.5;
+}
+
+.ts-line.start {
+  stroke: var(--blue);
+}
+
+.ts-line.end {
+  stroke: var(--accent);
+}
+
+/* 同一天的起止竖线：长度就是当天直播时长 */
+.ts-span {
+  stroke: var(--border);
+  stroke-width: 1;
+  opacity: 0.75;
+}
+
+.ts-dot.start {
+  fill: var(--blue);
+}
+
+.ts-dot.end {
+  fill: var(--accent);
+}
+
+.ts-dot:hover {
+  r: 4;
+}

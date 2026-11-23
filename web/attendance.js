@@ -17,6 +17,8 @@ const state = {
   calMonth: null,
   // 趋势图的时间范围（天数）：7 / 30 / 90，只影响趋势面板，不改接口窗口
   trendDays: 30,
+  // 直播日切分点：该时刻之前仍算前一天（默认凌晨 3 点）
+  dayCut: 3,
 };
 
 /* ---------------------------------------------------------------- 工具 */
@@ -520,27 +522,98 @@ function selectDay(dayStr) {
 
 /* ---------------------------------------------------------------- 趋势 */
 
-/** 当天首次开播的时刻（小时数，0–24）。null = 当天没有新开播（只有延续场）。 */
-function firstStartHour(detail) {
-  let first = null;
-  for (const it of detail || []) {
-    // 跨天延续场是前一天开的播，不是当天的开播时刻，跳过
-    if (it.continued_from_prev) continue;
-    const v = Number(it.session_start);
-    if (!Number.isFinite(v)) continue;
-    if (first === null || v < first) first = v;
-  }
-  if (first === null) return null;
-  const [h, m] = fmtParts(first).hm.split(':').map(Number);
-  return h + m / 60;
-}
-
 /** 6.5 → "06:30"；用于刻度与平均值 */
 function fmtHour(hour) {
   const total = Math.round(hour * 60);
   const h = Math.floor(total / 60) % 24;
   const m = total % 60;
   return `${pad(h)}:${pad(m)}`;
+}
+
+/** 东八区某天 0 点的 epoch 秒 */
+function dayStartEpoch(dayStr) {
+  const [y, m, d] = dayStr.split('-').map(Number);
+  return Date.UTC(y, m - 1, d) / 1000 - 8 * 3600;
+}
+
+/**
+ * 时刻所属的直播日：把时刻往前挪 cutHour 小时，再取日期。
+ * 默认 3 点切分时，17 号 23:00 开播 → 直播日 17 号；
+ * 次日 01:41 下播也仍算 17 号，不会被拆到两天。
+ */
+function broadcastDayOf(epochSec, cutHour) {
+  const dt = new Date((Number(epochSec) + 8 * 3600 - cutHour * 3600) * 1000);
+  return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+}
+
+/** 从各自然日的 detail 里还原整场；同一场跨天会出现两次，按 id 去重 */
+function sessionsFromDays(days) {
+  const map = new Map();
+  for (const d of days) {
+    for (const it of d.detail || []) {
+      if (map.has(it.id)) continue;
+      const start = Number(it.session_start);
+      const end = Number(it.session_end);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) continue;
+      map.set(it.id, {
+        id: it.id,
+        start,
+        end,
+        ended: !!it.ended,
+        peak: Number(it.peak_online) || 0,
+        title: it.title || '',
+      });
+    }
+  }
+  return [...map.values()];
+}
+
+/** 按直播日汇总：时长算整场，开播取最早，下播取最晚 */
+function buildBroadcastDays(sessions, cutHour) {
+  const map = new Map();
+  for (const s of sessions) {
+    const day = broadcastDayOf(s.start, cutHour);
+    const rec = map.get(day) || {
+      day,
+      seconds: 0,
+      sessions: 0,
+      peak: 0,
+      firstStart: s.start,
+      lastEnd: s.end,
+      ended: true,
+    };
+    rec.seconds += s.end - s.start;
+    rec.sessions += 1;
+    rec.peak = Math.max(rec.peak, s.peak);
+    rec.firstStart = Math.min(rec.firstStart, s.start);
+    rec.lastEnd = Math.max(rec.lastEnd, s.end);
+    rec.ended = rec.ended && s.ended;
+    map.set(day, rec);
+  }
+  return map;
+}
+
+/** 时刻在直播日时间轴上的位置（小时）：切分点 = 0，次日切分点 = 24。
+ *  传入 dayStr（该场开播归属的直播日）时按它算——下播时刻可能已过午夜，
+ *  不能拿它自己再算一次直播日，否则 11-14 的场次会被拆到 11-15。 */
+function timeAxisPos(epochSec, cutHour, dayStr) {
+  const day = dayStr || broadcastDayOf(epochSec, cutHour);
+  return (Number(epochSec) - dayStartEpoch(day) - cutHour * 3600) / 3600;
+}
+
+/** 时间轴位置 → 时钟文字，跨过午夜标「次日」 */
+function posClock(pos, cutHour) {
+  const total = Math.round((cutHour + pos) * 60);
+  const day = Math.floor(total / 1440);
+  const h = Math.floor((total % 1440) / 60);
+  const m = total % 60;
+  return `${day ? '次日 ' : ''}${pad(h)}:${pad(m)}`;
+}
+
+/** 某时刻的时钟文字；不在直播日当天就标「次日」 */
+function clockInDay(epochSec, dayStr) {
+  const p = fmtParts(epochSec);
+  return `${p.day === dayStr.slice(5) ? '' : '次日 '}${p.hm}`;
 }
 
 /** 单根柱子：height 按 value/max 的百分比给，0 值给 zero 样式 */
@@ -552,8 +625,96 @@ function trendBar(value, max, cls, tip) {
 }
 
 /**
- * 出勤趋势：两张柱状图，共用同一组日期。
- * 数据直接用日历已经加载的 days，切范围不重新发请求。
+ * 开播 / 下播时刻折线图。
+ * 柱状图要拿 0 点做基线，对「19:21」「次日 01:41」这种时刻没有意义；
+ * 时刻更适合放在一条 24 小时轴上：点高 = 时刻，两点之间的竖线 = 当天时长。
+ */
+function timeSeriesSvg(rows, statMap, cutHour) {
+  const W = 640;
+  const H = 190;
+  const L = 52;
+  const R = 10;
+  const T = 10;
+  const B = 26;
+  const pw = W - L - R;
+  const ph = H - T - B;
+  const n = rows.length;
+  const xOf = (i) => (n <= 1 ? L + pw / 2 : L + (i / (n - 1)) * pw);
+  const yOf = (hour) =>
+    T + (1 - Math.min(24, Math.max(0, hour)) / 24) * ph;
+
+  // 纵轴：直播日切分点起算的 0 / 6 / 12 / 18 / 24 小时
+  const grid = [0, 6, 12, 18, 24]
+    .map((h) => {
+      const y = yOf(h);
+      return `<line x1="${L}" y1="${y}" x2="${W - R}" y2="${y}" class="ts-grid"/>
+        <text x="${L - 6}" y="${y + 3}" class="ts-axis" text-anchor="end">${posClock(h, cutHour)}</text>`;
+    })
+    .join('');
+
+  // 横轴：日期标签，密度与柱状图一致
+  const step = n <= 7 ? 1 : n <= 30 ? 5 : 15;
+  const xAxis = rows
+    .map((r, i) => {
+      if (i % step !== 0 && i !== n - 1) return '';
+      return `<text x="${xOf(i)}" y="${H - 8}" class="ts-axis" text-anchor="middle">${r.day.slice(5)}</text>`;
+    })
+    .join('');
+
+  const starts = [];
+  const ends = [];
+  const dots = [];
+  rows.forEach((r, i) => {
+    const st = r.stat;
+    if (!st) return;
+    const sp = timeAxisPos(st.firstStart, cutHour, r.day);
+    const ep = timeAxisPos(st.lastEnd, cutHour, r.day);
+    const sx = xOf(i);
+    const sy = yOf(sp);
+    const ey = yOf(ep);
+    starts.push({ x: sx, y: sy, i });
+    ends.push({ x: sx, y: ey, i });
+    const tipStart = `${fmtDay(r.day)} · ${posClock(sp, cutHour)} 开播 · ${st.sessions} 场`;
+    const tipEnd = `${fmtDay(r.day)} · ${clockInDay(st.lastEnd, r.day)} 下播 · 共 ${humanDuration(st.seconds)}`;
+    // 同一天的起止用一条细竖线连起来，长度即当天直播时长
+    dots.push(`<line x1="${sx}" y1="${sy}" x2="${sx}" y2="${ey}" class="ts-span"/>`);
+    dots.push(`<circle cx="${sx}" cy="${sy}" r="2.6" class="ts-dot start"><title>${escapeHtml(tipStart)}</title></circle>`);
+    dots.push(`<circle cx="${sx}" cy="${ey}" r="2.6" class="ts-dot end"><title>${escapeHtml(tipEnd)}</title></circle>`);
+  });
+
+  // 折线只连相邻日期；中间停播就断开，别用一条直线跨过去假装有趋势
+  const polyline = (pts, cls) => {
+    let out = '';
+    let run = [];
+    const flush = () => {
+      if (run.length > 1) {
+        out += `<polyline class="${cls}" points="${run
+          .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+          .join(' ')}"/>`;
+      }
+      run = [];
+    };
+    pts.forEach((p, k) => {
+      if (k > 0 && p.i !== pts[k - 1].i + 1) flush();
+      run.push(p);
+    });
+    flush();
+    return out;
+  };
+
+  return `<svg class="ts-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="每日开播与下播时刻">
+      ${grid}
+      ${polyline(starts, 'ts-line start')}
+      ${polyline(ends, 'ts-line end')}
+      ${dots}
+      ${xAxis}
+    </svg>`;
+}
+
+/**
+ * 出勤趋势：按「直播日」聚合。
+ * 时长按时长柱状图；开播/下播时刻用 24 小时轴上的折线，比柱状图直观。
+ * 数据复用日历已加载的 days，切范围/切分点都不重新发请求。
  */
 function renderTrend() {
   const box = $('#trend-chart');
@@ -564,27 +725,29 @@ function renderTrend() {
     return;
   }
 
+  const cutHour = state.dayCut;
+  const statMap = buildBroadcastDays(sessionsFromDays(all), cutHour);
+
   // 只画数据窗口末尾的 N 天；窗口本身不足 N 天就按实际天数画
   const n = Math.min(state.trendDays, all.length);
-  const rows = all.slice(-n).map((d) => ({
-    day: d.day,
-    seconds: d.seconds || 0,
-    sessions: d.sessions || 0,
-    peak: d.peak_online || 0,
-    startHour: firstStartHour(d.detail),
-  }));
+  const rows = all
+    .slice(-n)
+    .map((d) => ({ day: d.day, stat: statMap.get(d.day) || null }));
 
-  const active = rows.filter((r) => r.seconds > 0);
-  const started = rows.filter((r) => r.startHour != null);
-  const totalSec = rows.reduce((s, r) => s + r.seconds, 0);
-  const maxSec = Math.max(0, ...rows.map((r) => r.seconds));
-  const avgStart = started.length
-    ? started.reduce((s, r) => s + r.startHour, 0) / started.length
+  const active = rows.filter((r) => r.stat);
+  const totalSec = active.reduce((s, r) => s + r.stat.seconds, 0);
+  const maxSec = Math.max(0, ...active.map((r) => r.stat.seconds));
+  const avgStartPos = active.length
+    ? active.reduce((s, r) => s + timeAxisPos(r.stat.firstStart, cutHour), 0) / active.length
     : null;
-  const minStart = started.length ? Math.min(...started.map((r) => r.startHour)) : null;
-  const maxStart = started.length ? Math.max(...started.map((r) => r.startHour)) : null;
+  const avgEndPos = active.length
+    ? active.reduce((s, r) => s + timeAxisPos(r.stat.lastEnd, cutHour), 0) / active.length
+    : null;
+  let latest = null;
+  for (const r of active) {
+    if (!latest || r.stat.lastEnd > latest.stat.lastEnd) latest = r;
+  }
 
-  // X 轴标签密度：7 天全标，30 天每 5 天，90 天每 15 天，末尾一定标
   const step = n <= 7 ? 1 : n <= 30 ? 5 : 15;
   const xAxis = `<div class="trend-x">${rows
     .map(
@@ -596,36 +759,20 @@ function renderTrend() {
   const durBars = rows
     .map((r) =>
       trendBar(
-        r.seconds,
+        r.stat ? r.stat.seconds : 0,
         maxSec,
         '',
-        `${fmtDay(r.day)} · ${
-          r.seconds
-            ? `${r.sessions} 场 · 共 ${humanDuration(r.seconds)} · 峰值 ${shortNum(r.peak)}`
-            : '未开播'
-        }`
-      )
-    )
-    .join('');
-
-  const startBars = rows
-    .map((r) =>
-      trendBar(
-        // 0 点开播也留一点高度，否则柱子完全看不见
-        r.startHour == null ? 0 : Math.max(r.startHour, 0.3),
-        24,
-        'start',
-        r.startHour == null
-          ? `${fmtDay(r.day)} · 当天没有新开播`
-          : `${fmtDay(r.day)} · ${fmtHour(r.startHour)} 开播`
+        r.stat
+          ? `${fmtDay(r.day)} · ${r.stat.sessions} 场 · 共 ${humanDuration(r.stat.seconds)} · 峰值 ${shortNum(r.stat.peak)}`
+          : `${fmtDay(r.day)} · 未开播`
       )
     )
     .join('');
 
   const windowNote = state.trendDays > all.length ? `（数据窗口仅 ${all.length} 天）` : '';
-  const startNote = started.length
-    ? `最早 ${fmtHour(minStart)} · 平均 ${fmtHour(avgStart)} · 最晚 ${fmtHour(maxStart)} · 越高开播越晚`
-    : '这段时间没有新开播';
+  const timeNote = active.length
+    ? `平均开播 ${posClock(avgStartPos, cutHour)} · 平均下播 ${posClock(avgEndPos, cutHour)} · 最晚下播 ${clockInDay(latest.stat.lastEnd, latest.day)}（${latest.day.slice(5)}）`
+    : '这段时间没有直播';
 
   box.innerHTML = `
     <div class="trend-block">
@@ -643,16 +790,15 @@ function renderTrend() {
     </div>
     <div class="trend-block">
       <div class="trend-head">
-        <span class="trend-name">每日开播时刻</span>
-        <span class="trend-note">${startNote}</span>
+        <span class="trend-name">每日开播 / 下播时刻</span>
+        <span class="trend-note">${timeNote}</span>
       </div>
-      <div class="trend-plot" style="--bar-h:90px">
-        <div class="trend-scale"><span>24:00</span><span>12:00</span><span>00:00</span></div>
-        <div class="trend-main">
-          <div class="trend-bars">${startBars}</div>
-          ${xAxis}
-        </div>
+      <div class="trend-legend">
+        <span class="lg start">●</span> 开播
+        <span class="lg end">●</span> 下播
+        <span class="lg-note">纵轴从 ${fmtHour(cutHour)} 起算 24 小时，越靠上越晚</span>
       </div>
+      ${timeSeriesSvg(rows, statMap, cutHour)}
     </div>`;
 }
 
@@ -905,6 +1051,15 @@ $('#window-days').addEventListener('change', (e) => {
   state.days = Number(e.target.value);
   loadDetail();
 });
+
+// 直播日切分点：只影响趋势的归日口径（日历仍按自然日展示）
+const dayCutSelect = $('#day-cut');
+if (dayCutSelect) {
+  dayCutSelect.addEventListener('change', (e) => {
+    state.dayCut = Number(e.target.value);
+    renderTrend();
+  });
+}
 
 // 趋势范围切换：只重画趋势，不重新请求接口（数据已经在 state.calendar 里）
 const trendRange = $('#trend-range');

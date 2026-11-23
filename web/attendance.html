@@ -104,8 +104,19 @@
           <div class="panel">
             <div class="panel-head">
               <h2>出勤趋势</h2>
-              <span class="hint">柱高 = 当天直播时长 / 当天首次开播时刻</span>
+              <span class="hint">按直播日统计：切分点前的时刻算前一天</span>
               <span class="spacer"></span>
+              <label class="field">
+                直播日切分
+                <select id="day-cut">
+                  <option value="0">0 点（自然日）</option>
+                  <option value="1">凌晨 1 点</option>
+                  <option value="2">凌晨 2 点</option>
+                  <option value="3" selected>凌晨 3 点</option>
+                  <option value="4">凌晨 4 点</option>
+                  <option value="6">凌晨 6 点</option>
+                </select>
+              </label>
               <span class="trend-range" id="trend-range">
                 <button type="button" data-trend-days="7">近 7 天</button>
                 <button type="button" data-trend-days="30" class="active">近 30 天</button>
