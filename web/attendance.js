@@ -616,99 +616,60 @@ function clockInDay(epochSec, dayStr) {
   return `${p.day === dayStr.slice(5) ? '' : '次日 '}${p.hm}`;
 }
 
-/** 单根柱子：height 按 value/max 的百分比给，0 值给 zero 样式 */
-function trendBar(value, max, cls, tip) {
+/** 单根柱子：height 按 value/max 的百分比给，0 值给 zero 样式。
+ *  label 是柱顶的精确小时数（1 位小数），空字符串则不显示。 */
+function trendBar(value, max, cls, tip, label) {
   const pct = max > 0 ? Math.max(0, (value / max) * 100) : 0;
   return `<div class="trend-col" title="${escapeHtml(tip)}">
       <div class="trend-bar ${cls}${pct <= 0 ? ' zero' : ''}" style="height:${pct.toFixed(1)}%"></div>
+      ${label ? `<span class="trend-val" style="bottom:calc(${pct.toFixed(1)}% + 2px)">${label}</span>` : ''}
     </div>`;
 }
 
 /**
- * 开播 / 下播时刻折线图。
- * 柱状图要拿 0 点做基线，对「19:21」「次日 01:41」这种时刻没有意义；
- * 时刻更适合放在一条 24 小时轴上：点高 = 时刻，两点之间的竖线 = 当天时长。
+ * 每日直播时段条。
+ * 折线图只能看「几点开、几点下」，两个点之间的横向关系不够直观；
+ * 改成每天一行、横轴 24 小时的时段条：条左端 = 开播，右端 = 下播，
+ * 长度就是当天播了多久，行尾再写一遍精确时刻和时长。
  */
-function timeSeriesSvg(rows, statMap, cutHour) {
-  const W = 640;
-  const H = 190;
-  const L = 52;
-  const R = 10;
-  const T = 10;
-  const B = 26;
-  const pw = W - L - R;
-  const ph = H - T - B;
-  const n = rows.length;
-  const xOf = (i) => (n <= 1 ? L + pw / 2 : L + (i / (n - 1)) * pw);
-  const yOf = (hour) =>
-    T + (1 - Math.min(24, Math.max(0, hour)) / 24) * ph;
+function timelineHtml(rows, cutHour) {
+  // 只列有直播的直播日；停播日不占行，否则 90 天会拉成一屏空白
+  const active = rows.filter((r) => r.stat).sort((a, b) => (a.day < b.day ? 1 : -1));
+  if (!active.length) return `<div class="loading">这段时间没有直播</div>`;
 
-  // 纵轴：直播日切分点起算的 0 / 6 / 12 / 18 / 24 小时
-  const grid = [0, 6, 12, 18, 24]
-    .map((h) => {
-      const y = yOf(h);
-      return `<line x1="${L}" y1="${y}" x2="${W - R}" y2="${y}" class="ts-grid"/>
-        <text x="${L - 6}" y="${y + 3}" class="ts-axis" text-anchor="end">${posClock(h, cutHour)}</text>`;
+  const ticks = [0, 6, 12, 18, 24];
+  const axis = `<div class="tl-axis">
+      <span class="tl-day"></span>
+      <div class="tl-track tl-track-axis">${ticks
+        .map(
+          (h) =>
+            `<span style="left:${(h / 24) * 100}%">${posClock(h, cutHour)}</span>`
+        )
+        .join('')}</div>
+      <span class="tl-times"></span>
+      <span class="tl-dur"></span>
+    </div>`;
+
+  const lines = active
+    .map((r) => {
+      const st = r.stat;
+      const sp = timeAxisPos(st.firstStart, cutHour, r.day);
+      const ep = timeAxisPos(st.lastEnd, cutHour, r.day);
+      const left = (Math.min(24, Math.max(0, sp)) / 24) * 100;
+      const right = (Math.min(24, Math.max(0, ep)) / 24) * 100;
+      const width = Math.max(0.6, right - left);
+      const endText = clockInDay(st.lastEnd, r.day);
+      const tip = `${fmtDay(r.day)} · ${posClock(sp, cutHour)} → ${endText} · ${st.sessions} 场 · 共 ${humanDuration(st.seconds)}`;
+      return `<div class="tl-row" title="${escapeHtml(tip)}">
+        <span class="tl-day">${r.day.slice(5)} 周${WEEK_LABELS[dowIndex(r.day)]}</span>
+        <div class="tl-track"><span class="tl-bar" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></span></div>
+        <span class="tl-times">${posClock(sp, cutHour)} → ${endText}</span>
+        <span class="tl-dur">${humanDuration(st.seconds)}</span>
+      </div>`;
     })
     .join('');
 
-  // 横轴：日期标签，密度与柱状图一致
-  const step = n <= 7 ? 1 : n <= 30 ? 5 : 15;
-  const xAxis = rows
-    .map((r, i) => {
-      if (i % step !== 0 && i !== n - 1) return '';
-      return `<text x="${xOf(i)}" y="${H - 8}" class="ts-axis" text-anchor="middle">${r.day.slice(5)}</text>`;
-    })
-    .join('');
-
-  const starts = [];
-  const ends = [];
-  const dots = [];
-  rows.forEach((r, i) => {
-    const st = r.stat;
-    if (!st) return;
-    const sp = timeAxisPos(st.firstStart, cutHour, r.day);
-    const ep = timeAxisPos(st.lastEnd, cutHour, r.day);
-    const sx = xOf(i);
-    const sy = yOf(sp);
-    const ey = yOf(ep);
-    starts.push({ x: sx, y: sy, i });
-    ends.push({ x: sx, y: ey, i });
-    const tipStart = `${fmtDay(r.day)} · ${posClock(sp, cutHour)} 开播 · ${st.sessions} 场`;
-    const tipEnd = `${fmtDay(r.day)} · ${clockInDay(st.lastEnd, r.day)} 下播 · 共 ${humanDuration(st.seconds)}`;
-    // 同一天的起止用一条细竖线连起来，长度即当天直播时长
-    dots.push(`<line x1="${sx}" y1="${sy}" x2="${sx}" y2="${ey}" class="ts-span"/>`);
-    dots.push(`<circle cx="${sx}" cy="${sy}" r="2.6" class="ts-dot start"><title>${escapeHtml(tipStart)}</title></circle>`);
-    dots.push(`<circle cx="${sx}" cy="${ey}" r="2.6" class="ts-dot end"><title>${escapeHtml(tipEnd)}</title></circle>`);
-  });
-
-  // 折线只连相邻日期；中间停播就断开，别用一条直线跨过去假装有趋势
-  const polyline = (pts, cls) => {
-    let out = '';
-    let run = [];
-    const flush = () => {
-      if (run.length > 1) {
-        out += `<polyline class="${cls}" points="${run
-          .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
-          .join(' ')}"/>`;
-      }
-      run = [];
-    };
-    pts.forEach((p, k) => {
-      if (k > 0 && p.i !== pts[k - 1].i + 1) flush();
-      run.push(p);
-    });
-    flush();
-    return out;
-  };
-
-  return `<svg class="ts-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="每日开播与下播时刻">
-      ${grid}
-      ${polyline(starts, 'ts-line start')}
-      ${polyline(ends, 'ts-line end')}
-      ${dots}
-      ${xAxis}
-    </svg>`;
+  return `<div class="tl">${axis}${lines}</div>`;
 }
 
 /**
@@ -771,7 +732,9 @@ function renderTrend() {
         '',
         r.stat
           ? `${fmtDay(r.day)} · ${r.stat.sessions} 场 · 共 ${humanDuration(r.stat.seconds)} · 峰值 ${shortNum(r.stat.peak)}`
-          : `${fmtDay(r.day)} · 未开播`
+          : `${fmtDay(r.day)} · 未开播`,
+        // 柱顶精确到 0.1 小时；90 天太密时由 .dense 隐藏
+        r.stat && r.stat.seconds ? hours(r.stat.seconds).toFixed(1) : ''
       )
     )
     .join('');
@@ -790,7 +753,7 @@ function renderTrend() {
       <div class="trend-plot" style="--bar-h:120px">
         <div class="trend-scale"><span>${maxSec ? `${hours(maxSec)}h` : '0'}</span><span>${maxSec ? `${hours(maxSec / 2)}h` : '0'}</span><span>0</span></div>
         <div class="trend-main">
-          <div class="trend-bars">${durBars}</div>
+          <div class="trend-bars${n > 30 ? ' dense' : ''}">${durBars}</div>
           ${xAxis}
         </div>
       </div>
@@ -801,11 +764,9 @@ function renderTrend() {
         <span class="trend-note">${timeNote}</span>
       </div>
       <div class="trend-legend">
-        <span class="lg start">●</span> 开播
-        <span class="lg end">●</span> 下播
-        <span class="lg-note">纵轴从 ${fmtHour(cutHour)} 起算 24 小时，越靠上越晚</span>
+        <span class="lg-note">最近在上 · 条长 = 当天直播时长 · 只列有直播的直播日</span>
       </div>
-      ${timeSeriesSvg(rows, statMap, cutHour)}
+      ${timelineHtml(rows, cutHour)}
     </div>`;
 }
 

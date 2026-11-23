@@ -647,7 +647,30 @@ button.cal-cell.muted:hover {
   white-space: nowrap;
 }
 
-/* 时刻折线图：开播/下播各一条线，点高即时刻 */
+/* 时长柱顶的精确小时数（保留 1 位小数） */
+.trend-col {
+  position: relative;
+}
+
+.trend-val {
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  text-align: center;
+  font-size: 9px;
+  line-height: 10px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 90 天时每列只有几像素，柱顶数字必然重叠，改用悬停看精确值 */
+.trend-bars.dense .trend-val {
+  display: none;
+}
+
+/* 每日直播时段条：每天一行，横轴 24 小时 */
 .trend-legend {
   display: flex;
   align-items: baseline;
@@ -657,65 +680,105 @@ button.cal-cell.muted:hover {
   color: var(--text-dim);
 }
 
-.trend-legend .lg.start {
-  color: var(--blue);
-}
-
-.trend-legend .lg.end {
-  color: var(--accent);
-}
-
 .trend-legend .lg-note {
-  margin-left: 8px;
   color: var(--text-faint);
 }
 
-.ts-svg {
-  display: block;
-  width: 100%;
-  height: auto;
+.tl {
+  margin-top: 2px;
 }
 
-.ts-grid {
-  stroke: var(--border-soft);
-  stroke-width: 1;
+.tl-axis,
+.tl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.ts-axis {
-  fill: var(--text-faint);
+.tl-axis {
+  margin-bottom: 3px;
   font-size: 10px;
+  color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
 
-.ts-line {
-  fill: none;
-  stroke-width: 1.2;
-  opacity: 0.5;
+.tl-day {
+  flex: 0 0 74px;
+  font-size: 10px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.ts-line.start {
-  stroke: var(--blue);
+.tl-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 12px;
+  min-width: 0;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: repeating-linear-gradient(
+    90deg,
+    var(--border-soft) 0 1px,
+    transparent 1px 25%
+  );
 }
 
-.ts-line.end {
-  stroke: var(--accent);
+.tl-track-axis {
+  height: 12px;
+  border: 0;
+  background: none;
 }
 
-/* 同一天的起止竖线：长度就是当天直播时长 */
-.ts-span {
-  stroke: var(--border);
-  stroke-width: 1;
-  opacity: 0.75;
+.tl-track-axis span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
 }
 
-.ts-dot.start {
-  fill: var(--blue);
+.tl-track-axis span:first-child {
+  transform: none;
 }
 
-.ts-dot.end {
-  fill: var(--accent);
+.tl-track-axis span:last-child {
+  transform: translateX(-100%);
 }
 
-.ts-dot:hover {
-  r: 4;
+.tl-bar {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 8px;
+  border-radius: 4px;
+  background: var(--accent);
+  opacity: 0.8;
+}
+
+.tl-row {
+  padding: 2px 0;
+}
+
+.tl-row:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.tl-row:hover .tl-bar {
+  opacity: 1;
+}
+
+.tl-times {
+  flex: 0 0 128px;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tl-dur {
+  flex: 0 0 60px;
+  text-align: right;
+  font-size: 10px;
+  color: var(--accent);
+  white-space: nowrap;
 }
