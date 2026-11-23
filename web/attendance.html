@@ -99,6 +99,27 @@
           </div>
         </section>
 
+        <!-- 出勤趋势：柱状图看每天的直播时长与开播时刻 -->
+        <section>
+          <div class="panel">
+            <div class="panel-head">
+              <h2>出勤趋势</h2>
+              <span class="hint">柱高 = 当天直播时长 / 当天首次开播时刻</span>
+              <span class="spacer"></span>
+              <span class="trend-range" id="trend-range">
+                <button type="button" data-trend-days="7">近 7 天</button>
+                <button type="button" data-trend-days="30" class="active">近 30 天</button>
+                <button type="button" data-trend-days="90">近 90 天</button>
+              </span>
+            </div>
+            <div class="panel-body">
+              <div id="trend-chart" class="trend-wrap">
+                <div class="loading">加载中…</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- 场次明细 -->
         <section>
           <div class="panel">

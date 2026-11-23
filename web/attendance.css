@@ -528,3 +528,121 @@ button.cal-cell.muted:hover {
   padding: 1px 6px;
   border-radius: 4px;
 }
+
+/* ---------------------------------------------------------------- 趋势 */
+
+.trend-range {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.trend-range button {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.trend-block + .trend-block {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.trend-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 7px;
+}
+
+.trend-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.trend-note {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-plot {
+  display: flex;
+  gap: 8px;
+}
+
+/* 左侧刻度：与柱区等高，首/中/尾三档正好对齐 100% / 50% / 0 */
+.trend-scale {
+  display: flex;
+  flex: 0 0 38px;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 38px;
+  height: var(--bar-h, 120px);
+  font-size: 10px;
+  color: var(--text-faint);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 柱区：高度由 --bar-h 控制，背景每 25% 一条参考线 */
+.trend-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: var(--bar-h, 120px);
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(var(--border-soft) 1px, transparent 1px) 0 0 / 100% 25%;
+}
+
+.trend-col {
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  height: 100%;
+  min-width: 0;
+}
+
+.trend-bar {
+  width: 100%;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.82;
+  transition: opacity 0.12s;
+}
+
+.trend-col:hover .trend-bar {
+  opacity: 1;
+}
+
+/* 开播时刻用蓝色区分；零值不画柱子，但整列仍可悬停看提示 */
+.trend-bar.start {
+  background: var(--blue);
+}
+
+.trend-bar.zero {
+  background: transparent;
+}
+
+.trend-x {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-x span {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+}

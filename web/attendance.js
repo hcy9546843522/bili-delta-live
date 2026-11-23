@@ -15,6 +15,8 @@ const state = {
   selectedDay: null,
   // 日历当前显示的月份（'YYYY-MM'）。一次只显示一个月，靠翻页切换。
   calMonth: null,
+  // 趋势图的时间范围（天数）：7 / 30 / 90，只影响趋势面板，不改接口窗口
+  trendDays: 30,
 };
 
 /* ---------------------------------------------------------------- 工具 */
@@ -171,6 +173,7 @@ async function loadDetail() {
   renderHeader();
   renderStats();
   renderCalendar();
+  renderTrend();
   renderSessions();
 }
 
@@ -515,6 +518,144 @@ function selectDay(dayStr) {
   renderDayDetail(dayStr);
 }
 
+/* ---------------------------------------------------------------- 趋势 */
+
+/** 当天首次开播的时刻（小时数，0–24）。null = 当天没有新开播（只有延续场）。 */
+function firstStartHour(detail) {
+  let first = null;
+  for (const it of detail || []) {
+    // 跨天延续场是前一天开的播，不是当天的开播时刻，跳过
+    if (it.continued_from_prev) continue;
+    const v = Number(it.session_start);
+    if (!Number.isFinite(v)) continue;
+    if (first === null || v < first) first = v;
+  }
+  if (first === null) return null;
+  const [h, m] = fmtParts(first).hm.split(':').map(Number);
+  return h + m / 60;
+}
+
+/** 6.5 → "06:30"；用于刻度与平均值 */
+function fmtHour(hour) {
+  const total = Math.round(hour * 60);
+  const h = Math.floor(total / 60) % 24;
+  const m = total % 60;
+  return `${pad(h)}:${pad(m)}`;
+}
+
+/** 单根柱子：height 按 value/max 的百分比给，0 值给 zero 样式 */
+function trendBar(value, max, cls, tip) {
+  const pct = max > 0 ? Math.max(0, (value / max) * 100) : 0;
+  return `<div class="trend-col" title="${escapeHtml(tip)}">
+      <div class="trend-bar ${cls}${pct <= 0 ? ' zero' : ''}" style="height:${pct.toFixed(1)}%"></div>
+    </div>`;
+}
+
+/**
+ * 出勤趋势：两张柱状图，共用同一组日期。
+ * 数据直接用日历已经加载的 days，切范围不重新发请求。
+ */
+function renderTrend() {
+  const box = $('#trend-chart');
+  if (!box) return;
+  const all = (state.calendar && state.calendar.days) || [];
+  if (!all.length) {
+    box.innerHTML = `<div class="loading">暂无数据</div>`;
+    return;
+  }
+
+  // 只画数据窗口末尾的 N 天；窗口本身不足 N 天就按实际天数画
+  const n = Math.min(state.trendDays, all.length);
+  const rows = all.slice(-n).map((d) => ({
+    day: d.day,
+    seconds: d.seconds || 0,
+    sessions: d.sessions || 0,
+    peak: d.peak_online || 0,
+    startHour: firstStartHour(d.detail),
+  }));
+
+  const active = rows.filter((r) => r.seconds > 0);
+  const started = rows.filter((r) => r.startHour != null);
+  const totalSec = rows.reduce((s, r) => s + r.seconds, 0);
+  const maxSec = Math.max(0, ...rows.map((r) => r.seconds));
+  const avgStart = started.length
+    ? started.reduce((s, r) => s + r.startHour, 0) / started.length
+    : null;
+  const minStart = started.length ? Math.min(...started.map((r) => r.startHour)) : null;
+  const maxStart = started.length ? Math.max(...started.map((r) => r.startHour)) : null;
+
+  // X 轴标签密度：7 天全标，30 天每 5 天，90 天每 15 天，末尾一定标
+  const step = n <= 7 ? 1 : n <= 30 ? 5 : 15;
+  const xAxis = `<div class="trend-x">${rows
+    .map(
+      (r, i) =>
+        `<span>${i % step === 0 || i === rows.length - 1 ? r.day.slice(5) : ''}</span>`
+    )
+    .join('')}</div>`;
+
+  const durBars = rows
+    .map((r) =>
+      trendBar(
+        r.seconds,
+        maxSec,
+        '',
+        `${fmtDay(r.day)} · ${
+          r.seconds
+            ? `${r.sessions} 场 · 共 ${humanDuration(r.seconds)} · 峰值 ${shortNum(r.peak)}`
+            : '未开播'
+        }`
+      )
+    )
+    .join('');
+
+  const startBars = rows
+    .map((r) =>
+      trendBar(
+        // 0 点开播也留一点高度，否则柱子完全看不见
+        r.startHour == null ? 0 : Math.max(r.startHour, 0.3),
+        24,
+        'start',
+        r.startHour == null
+          ? `${fmtDay(r.day)} · 当天没有新开播`
+          : `${fmtDay(r.day)} · ${fmtHour(r.startHour)} 开播`
+      )
+    )
+    .join('');
+
+  const windowNote = state.trendDays > all.length ? `（数据窗口仅 ${all.length} 天）` : '';
+  const startNote = started.length
+    ? `最早 ${fmtHour(minStart)} · 平均 ${fmtHour(avgStart)} · 最晚 ${fmtHour(maxStart)} · 越高开播越晚`
+    : '这段时间没有新开播';
+
+  box.innerHTML = `
+    <div class="trend-block">
+      <div class="trend-head">
+        <span class="trend-name">每日直播时长</span>
+        <span class="trend-note">最近 ${rows.length} 天${windowNote} · 开播 ${active.length} 天 · 合计 ${humanDuration(totalSec)} · 停播 ${rows.length - active.length} 天</span>
+      </div>
+      <div class="trend-plot" style="--bar-h:120px">
+        <div class="trend-scale"><span>${maxSec ? `${hours(maxSec)}h` : '0'}</span><span>${maxSec ? `${hours(maxSec / 2)}h` : '0'}</span><span>0</span></div>
+        <div class="trend-main">
+          <div class="trend-bars">${durBars}</div>
+          ${xAxis}
+        </div>
+      </div>
+    </div>
+    <div class="trend-block">
+      <div class="trend-head">
+        <span class="trend-name">每日开播时刻</span>
+        <span class="trend-note">${startNote}</span>
+      </div>
+      <div class="trend-plot" style="--bar-h:90px">
+        <div class="trend-scale"><span>24:00</span><span>12:00</span><span>00:00</span></div>
+        <div class="trend-main">
+          <div class="trend-bars">${startBars}</div>
+          ${xAxis}
+        </div>
+      </div>
+    </div>`;
+}
+
 /* ---------------------------------------------------------------- 场次表 */
 
 function renderSessions() {
@@ -764,6 +905,20 @@ $('#window-days').addEventListener('change', (e) => {
   state.days = Number(e.target.value);
   loadDetail();
 });
+
+// 趋势范围切换：只重画趋势，不重新请求接口（数据已经在 state.calendar 里）
+const trendRange = $('#trend-range');
+if (trendRange) {
+  trendRange.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-trend-days]');
+    if (!btn) return;
+    state.trendDays = Number(btn.dataset.trendDays);
+    for (const el of trendRange.querySelectorAll('button')) {
+      el.classList.toggle('active', el === btn);
+    }
+    renderTrend();
+  });
+}
 
 // 日历格子是每次重绘生成的，所以用委托绑在容器上，而不是逐个加监听。
 $('#calendar').addEventListener('click', (e) => {
