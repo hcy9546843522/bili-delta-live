@@ -106,6 +106,8 @@ const state = {
   // 直播状态筛选：快照拍下后陆续有人下播，全展示时几百个已下播房间会淹没有效信息。
   // 'all' | 'live' | 'dead' | 'never'，与「直播状态」列同一口径（都走 liveStateOf）。
   liveFilter: 'all',
+  // 分区筛选：'all' | 'delta' | 'other'，按最近一次采集到的当前分区
+  areaFilter: 'all',
   // 无限滚动：不翻页。没有「当前页」，只有「已渲染到第几行」。
   // shown 是当前已渲染的行数，滚到接近底部时 appendRows() 再追加一批。
   batchSize: 100,
@@ -394,6 +396,12 @@ function filtered() {
       const st = liveStateOf(r);
       return st && st.state === state.liveFilter;
     });
+  }
+
+  // 分区筛选：878 = 三角洲行动。'other' 包含未知分区（area_id=0）的房间。
+  if (state.areaFilter !== 'all') {
+    const wantDelta = state.areaFilter === 'delta';
+    rows = rows.filter((r) => (Number(r.area_id) === 878) === wantDelta);
   }
 
   if (state.minOnline > 0) {
@@ -1272,6 +1280,12 @@ function bindEvents() {
     render();
   });
 
+  on('#area-filter', 'change', (e) => {
+    state.areaFilter = e.target.value;
+    state.shown = state.batchSize;
+    render();
+  });
+
   on('#min-online', 'change', (e) => {
     state.minOnline = Number(e.target.value) || 0;
     state.shown = state.batchSize;
@@ -1326,6 +1340,7 @@ function bindEvents() {
     state.query = '';
     state.minOnline = 0;
     state.liveFilter = 'all';
+    state.areaFilter = 'all';
     state.durFilter = 'all';
     state.shown = state.batchSize;
     const si = $('#search-input');
@@ -1334,6 +1349,8 @@ function bindEvents() {
     if (mo) mo.value = '0';
     const lf = $('#live-filter');
     if (lf) lf.value = 'all';
+    const af = $('#area-filter');
+    if (af) af.value = 'all';
     const df = $('#dur-filter');
     if (df) df.value = 'all';
     render();

@@ -810,3 +810,14 @@ button.cal-cell.muted:hover {
   background: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
+
+/* 场次表分区列：切过分区时显示「开播 → 当前」 */
+#sessions-table td.sess-area {
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.sess-area-arrow {
+  color: var(--text-faint);
+}

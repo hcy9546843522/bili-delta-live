@@ -796,7 +796,7 @@ function renderSessions() {
 
   const tbody = $('#sessions-table tbody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="loading">还没有场次记录</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="loading">还没有场次记录</td></tr>`;
     return;
   }
 
@@ -813,10 +813,21 @@ function renderSessions() {
         <td class="num">${dur}</td>
         <td class="num">${shortNum(s.peak_online)}</td>
         <td>${pill}</td>
+        <td class="sess-area">${sessionAreaText(s)}</td>
         <td>${escapeHtml(s.title || '')}</td>
       </tr>`;
     })
     .join('');
+}
+
+/** 场次分区：切过分区就显示「开播 → 当前」，否则只显示当前分区 */
+function sessionAreaText(s) {
+  const curName = s.area_name || '';
+  const startName = s.start_area_name || '';
+  if (startName && curName && startName !== curName) {
+    return `${escapeHtml(startName)} <span class="sess-area-arrow">→</span> ${escapeHtml(curName)}`;
+  }
+  return escapeHtml(curName || '—');
 }
 
 /* ---------------------------------------------------------------- 导出 */

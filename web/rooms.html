@@ -57,6 +57,18 @@
                 </select>
               </label>
               <!--
+                分区筛选：列表里会混入已经切到别的分区、或本来就不是三角洲的房间。
+                按「最近一次采集到的当前分区」筛，默认全部。
+              -->
+              <label class="field" title="按最近一次采集到的当前分区筛选">
+                分区
+                <select id="area-filter">
+                  <option value="all">全部</option>
+                  <option value="delta">仅三角洲</option>
+                  <option value="other">非三角洲</option>
+                </select>
+              </label>
+              <!--
                 开播时长筛选：主要用途是「快速捞刚开播的直播间」。
                 依据 live_time（B 站给的真实开播时刻）而非首次采集时间，
                 所以冷层主播几天才查一次也不会被误判成刚开播。
