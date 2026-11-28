@@ -264,6 +264,31 @@ td.status-cell .status-age {
   margin-left: 4px;
 }
 
+/* 分区列：开播分区 → 当前分区；切走的加醒目标记 */
+td.area-cell {
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.area-from {
+  color: var(--text-faint);
+}
+
+.area-arrow {
+  margin: 0 3px;
+  color: var(--text-faint);
+}
+
+.area-now {
+  color: var(--text);
+}
+
+.area-cell .badge {
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 0 4px;
+}
+
 /*
  * 开播时长列。
  *

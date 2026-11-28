@@ -188,6 +188,13 @@ async function loadRoomsFromDb() {
         roomid: r.roomid ?? '',
         title: r.title || '',
         area_name: r.area_name || '',
+        // 分区口径：开播分区记在 start_*，当前分区可能已经被切走
+        area_id: Number(r.area_id) || 0,
+        start_area_id: Number(r.start_area_id) || 0,
+        start_area_name: r.start_area_name || '',
+        last_change_at: Number(r.last_change_at) || 0,
+        last_change_from_name: r.last_change_from_name || '',
+        last_change_to_name: r.last_change_to_name || '',
         online: Number(r.last_online) || Number(r.online) || 0,
         live_time: r.live_time,
         // 已开播秒数：B 站接口给的 live_time 是本场开播时刻，是真实开播时间，
@@ -295,6 +302,42 @@ function statusCell(r) {
  * 刚开播的（30 分钟内）额外标绿，因为这一列的主要用途就是快速捞新开的直播间，
  * 需要能一眼扫到；纯数字在几百行里很难抓。
  */
+/** 分区：开播分区 → 当前分区；当前不在三角洲时加醒目标记 */
+function areaCell(r) {
+  const curId = Number(r.area_id) || 0;
+  const curName = r.area_name || '未知分区';
+  const startId = Number(r.start_area_id) || 0;
+  const startName = r.start_area_name || '';
+  const changed = startId > 0 && curId > 0 && startId !== curId;
+  // 878 = 三角洲行动。当前分区不是它，说明已切走或本来就不是三角洲
+  const away = curId > 0 && curId !== 878;
+
+  const tip = [];
+  if (startName) tip.push(`开播分区：${startName}`);
+  tip.push(`当前分区：${curName}`);
+  if (r.last_observed_at && state.serverNow) {
+    tip.push(`上次确认：${fmtAgo(Math.max(0, state.serverNow - r.last_observed_at))}`);
+  }
+  if (r.last_change_at) {
+    const ago = state.serverNow
+      ? fmtAgo(Math.max(0, state.serverNow - r.last_change_at))
+      : '';
+    tip.push(
+      `最近切换：${r.last_change_from_name || '?'} → ${r.last_change_to_name || '?'}${
+        ago ? `（${ago}）` : ''
+      }`
+    );
+  }
+
+  const label = changed
+    ? `<span class="area-from">${esc(startName || '未知')}</span><span class="area-arrow">→</span><span class="area-now">${esc(curName)}</span>`
+    : `<span class="area-now">${esc(curName)}</span>`;
+  const badge = away
+    ? `<span class="badge warn area-out">${startId === 878 ? '已切走' : '非三角洲'}</span>`
+    : '';
+  return `<td class="area-cell" title="${esc(tip.join('\n'))}">${label}${badge}</td>`;
+}
+
 function durCell(r) {
   const d = Number(r.duration);
   if (!Number.isFinite(d) || d < 0) return '<td class="dur-cell">—</td>';
@@ -398,6 +441,12 @@ function filtered() {
       if (aBad) return 1;
       if (bBad) return -1;
       return (an - bn) * mul;
+    }
+    if (key === 'area') {
+      // 行的排序键是 'area'，实际比较的是 area_name（表格里显示的分区文字）
+      av = String(a.area_name || '');
+      bv = String(b.area_name || '');
+      return av.localeCompare(bv, 'zh-CN') * mul;
     }
     if (key === 'online' || key === 'roomid' || key === 'uid') {
       av = Number(av) || 0;
@@ -879,6 +928,8 @@ const COLUMNS = [
   { key: 'uname', label: '主播', sortable: true, cls: 'uname' },
   // 直播状态：快照只是某一刻的切片，这一列说明「现在还在不在播」
   { key: 'live', label: '直播状态', sortable: false, cls: 'status-cell' },
+  // 分区：显示开播分区 → 当前分区。主播可能中途切走，没切走的只显示一个。
+  { key: 'area', label: '分区', sortable: true, cls: 'area-cell' },
   // 开播时长：live_time 是 B 站给的真实开播时刻，用它算「已开播多久」，
   // 比「track 第一次看到它的时间」准确——后者受采集频率影响，冰层主播能差几天。
   // 可排序：配合「开播」筛选快速捞刚开播的直播间。
@@ -902,6 +953,7 @@ function rowHtml(r, rank, showCover) {
     ${showCover ? coverCell(r) : ''}
     ${unameCell(r)}
     ${statusCell(r)}
+    ${areaCell(r)}
     ${durCell(r)}
     <td class="num"${hot}>${fmt(r.online || 0)}</td>
     <td class="room"><a href="${esc(
