@@ -730,18 +730,18 @@ button.cal-cell.muted:hover {
   background: none;
 }
 
-.tl-track-axis span {
+.tl-track-axis > span {
   position: absolute;
   top: 0;
   transform: translateX(-50%);
   white-space: nowrap;
 }
 
-.tl-track-axis span:first-child {
+.tl-track-axis > span:first-child {
   transform: none;
 }
 
-.tl-track-axis span:last-child {
+.tl-track-axis > span:last-child {
   transform: translateX(-100%);
 }
 
